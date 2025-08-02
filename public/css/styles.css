@@ -618,6 +618,183 @@ body {
     margin-top: 10px;
 }
 
+/* PWA Update Notification */
+.update-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #667eea;
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    animation: slideInRight 0.3s ease-out;
+}
+
+.update-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.update-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.update-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Status Messages */
+.status-message {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 12px 20px;
+    border-radius: 6px;
+    color: white;
+    font-weight: 600;
+    z-index: 10000;
+    animation: slideInDown 0.3s ease-out;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-message.success {
+    background: #28a745;
+}
+
+.status-message.warning {
+    background: #ffc107;
+    color: #333;
+}
+
+.status-message.error {
+    background: #dc3545;
+}
+
+/* Offline Mode Styles */
+body.offline .upload-area {
+    opacity: 0.8;
+}
+
+body.offline .upload-area::before {
+    content: "OFFLINE MODE";
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #ffc107;
+    color: #333;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* Animations */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideInDown {
+    from {
+        transform: translateX(-50%) translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+}
+
+/* PWA Install Prompt */
+.install-prompt {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    background: #667eea;
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    display: none;
+}
+
+.install-prompt.show {
+    display: block;
+    animation: slideInUp 0.3s ease-out;
+}
+
+.install-prompt-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+}
+
+.install-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.install-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.dismiss-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dismiss-btn:hover {
+    color: white;
+}
+
+@keyframes slideInUp {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
 .video-item video {
     width: 100%;
     height: auto;

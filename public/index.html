@@ -4,6 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TeslaCam Video Player</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="View, edit, and create custom clips from TeslaCam videos from Dashcam or Sentry Mode">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="TeslaCam">
+    <meta name="msapplication-TileColor" content="#667eea">
+    <meta name="msapplication-config" content="/browserconfig.xml">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
+    
+    <!-- Stylesheets -->
     <link rel="stylesheet" href="css/styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
@@ -166,6 +189,24 @@
         </div>
     </div>
     
+    <!-- PWA Install Prompt -->
+    <div class="install-prompt" id="installPrompt">
+        <div class="install-prompt-content">
+            <div>
+                <i class="fas fa-download"></i>
+                <span>Install TeslaCam Video Player for quick access</span>
+            </div>
+            <div>
+                <button class="install-btn" id="installBtn">
+                    <i class="fas fa-plus"></i> Install
+                </button>
+                <button class="dismiss-btn" id="dismissBtn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-content">
@@ -176,5 +217,122 @@
     </footer>
 
     <script src="js/app.js"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        // Register service worker for PWA functionality
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('Service Worker registered successfully:', registration.scope);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // New version available
+                                    showUpdateNotification();
+                                }
+                            });
+                        });
+                    })
+                    .catch((error) => {
+                        console.error('Service Worker registration failed:', error);
+                    });
+            });
+        }
+
+        // Show update notification
+        function showUpdateNotification() {
+            const notification = document.createElement('div');
+            notification.className = 'update-notification';
+            notification.innerHTML = `
+                <div class="update-content">
+                    <i class="fas fa-download"></i>
+                    <span>New version available! Refresh to update.</span>
+                    <button onclick="location.reload()" class="update-btn">
+                        <i class="fas fa-sync-alt"></i> Update
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(notification);
+            
+            // Auto-hide after 10 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 10000);
+        }
+
+        // Handle offline/online status
+        window.addEventListener('online', () => {
+            document.body.classList.remove('offline');
+            showStatusMessage('Back online', 'success');
+        });
+
+        window.addEventListener('offline', () => {
+            document.body.classList.add('offline');
+            showStatusMessage('You are offline - app will work with cached content', 'warning');
+        });
+
+        function showStatusMessage(message, type) {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status-message ${type}`;
+            statusDiv.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
+                <span>${message}</span>
+            `;
+            document.body.appendChild(statusDiv);
+            
+            setTimeout(() => {
+                if (statusDiv.parentNode) {
+                    statusDiv.parentNode.removeChild(statusDiv);
+                }
+            }, 3000);
+        }
+
+        // PWA Install Prompt
+        let deferredPrompt;
+        const installPrompt = document.getElementById('installPrompt');
+        const installBtn = document.getElementById('installBtn');
+        const dismissBtn = document.getElementById('dismissBtn');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // Show install prompt after a delay
+            setTimeout(() => {
+                if (deferredPrompt && !localStorage.getItem('installPromptDismissed')) {
+                    installPrompt.classList.add('show');
+                }
+            }, 3000);
+        });
+
+        installBtn.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log('Install prompt outcome:', outcome);
+                deferredPrompt = null;
+                installPrompt.classList.remove('show');
+            }
+        });
+
+        dismissBtn.addEventListener('click', () => {
+            installPrompt.classList.remove('show');
+            localStorage.setItem('installPromptDismissed', 'true');
+        });
+
+        // Hide install prompt if app is already installed
+        window.addEventListener('appinstalled', () => {
+            installPrompt.classList.remove('show');
+            deferredPrompt = null;
+            showStatusMessage('TeslaCam Video Player installed successfully!', 'success');
+        });
+    </script>
 </body>
 </html> 
