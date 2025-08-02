@@ -2,6 +2,12 @@
 
 A modern web application for viewing, editing, and creating custom clips from TeslaCam videos from Dashcam or Sentry Mode, similar to [sentrycam.video](https://sentrycam.video/). Built with Node.js and vanilla JavaScript.
 
+## 🌐 Live Demo
+
+**Try it now:** [https://teslaview.vercel.app/](https://teslaview.vercel.app/)
+
+The application is deployed and ready to use! Simply visit the link above to start viewing and editing your TeslaCam videos.
+
 ## Features
 
 ### Core Video Playback
@@ -50,6 +56,8 @@ A modern web application for viewing, editing, and creating custom clips from Te
 
 5. Open your browser and navigate to `http://localhost:3000`
 
+**Or use the live demo:** [https://teslaview.vercel.app/](https://teslaview.vercel.app/)
+
 ## Development
 
 For development with auto-restart on file changes:
@@ -58,6 +66,15 @@ npm run dev
 ```
 
 ## Usage
+
+### Quick Start
+
+**Option 1: Use the Live Demo**
+- Visit [https://teslaview.vercel.app/](https://teslaview.vercel.app/)
+- No installation required - works directly in your browser
+
+**Option 2: Run Locally**
+- Follow the installation instructions below
 
 ### Loading Videos
 
@@ -236,6 +253,12 @@ For issues or questions:
 3. Verify your TeslaCam files are properly formatted
 4. Check the browser console for error messages
 5. Test video editing features with shorter clips first
+
+## Live Demo
+
+**Try the application online:** [https://teslaview.vercel.app/](https://teslaview.vercel.app/)
+
+The live demo is fully functional and supports all features including video splicing, combining, and downloading.
 
 ---
 
