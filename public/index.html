@@ -2,17 +2,21 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>TeslaCam Video Player</title>
     
     <!-- PWA Meta Tags -->
     <meta name="description" content="View, edit, and create custom clips from TeslaCam videos from Dashcam or Sentry Mode">
     <meta name="theme-color" content="#667eea">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TeslaCam">
     <meta name="msapplication-TileColor" content="#667eea">
     <meta name="msapplication-config" content="/browserconfig.xml">
+    
+    <!-- iOS specific meta tags -->
+    <meta name="apple-touch-fullscreen" content="yes">
+    <meta name="format-detection" content="telephone=no">
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json">
@@ -20,7 +24,9 @@
     <!-- Apple Touch Icons -->
     <link rel="apple-touch-icon" href="/icons/icon-152x152.png">
     <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180x180.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="/icons/icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="/icons/icon-76x76.png">
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
@@ -414,6 +420,27 @@ To install manually:
             deferredPrompt = null;
             showStatusMessage('TeslaCam Video Player installed successfully!', 'success');
         });
+
+        // iOS PWA specific handling
+        function checkIOSPWA() {
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const isStandalone = window.navigator.standalone === true;
+            
+            if (isIOS && isStandalone) {
+                console.log('Running as iOS PWA');
+                document.body.classList.add('ios-pwa');
+            }
+            
+            // Check if service worker is registered
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    console.log('Service Worker ready:', registration);
+                });
+            }
+        }
+
+        // Check on load
+        window.addEventListener('load', checkIOSPWA);
     </script>
 </body>
 </html> 
