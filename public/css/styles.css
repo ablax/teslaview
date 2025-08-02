@@ -795,6 +795,32 @@ body.offline .upload-area::before {
     }
 }
 
+/* Manual Install Button */
+.manual-install {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10000;
+}
+
+.manual-install-btn {
+    background: #667eea;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+}
+
+.manual-install-btn:hover {
+    background: #5a67d8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
 .video-item video {
     width: 100%;
     height: auto;

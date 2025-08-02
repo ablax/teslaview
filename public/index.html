@@ -207,6 +207,13 @@
         </div>
     </div>
     
+    <!-- Manual Install Button (for testing) -->
+    <div class="manual-install" id="manualInstall" style="display: none;">
+        <button class="manual-install-btn" onclick="showManualInstallInfo()">
+            <i class="fas fa-info-circle"></i> PWA Install Info
+        </button>
+    </div>
+    
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-content">
@@ -300,17 +307,81 @@
         const installBtn = document.getElementById('installBtn');
         const dismissBtn = document.getElementById('dismissBtn');
 
+        // Debug PWA installability
+        function checkPWAInstallability() {
+            console.log('=== PWA Installability Check ===');
+            console.log('Service Worker supported:', 'serviceWorker' in navigator);
+            console.log('Before Install Prompt supported:', 'BeforeInstallPromptEvent' in window);
+            console.log('Standalone mode:', window.matchMedia('(display-mode: standalone)').matches);
+            console.log('Manifest loaded:', !!document.querySelector('link[rel="manifest"]'));
+            
+            // Check if manifest is accessible
+            fetch('/manifest.json')
+                .then(response => {
+                    console.log('Manifest accessible:', response.ok);
+                    return response.json();
+                })
+                .then(manifest => {
+                    console.log('Manifest content:', manifest);
+                    console.log('Icons count:', manifest.icons ? manifest.icons.length : 0);
+                    console.log('Display mode:', manifest.display);
+                    console.log('Start URL:', manifest.start_url);
+                })
+                .catch(error => {
+                    console.error('Manifest error:', error);
+                });
+        }
+
         window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('Before Install Prompt Event fired!');
             e.preventDefault();
             deferredPrompt = e;
             
             // Show install prompt after a delay
             setTimeout(() => {
                 if (deferredPrompt && !localStorage.getItem('installPromptDismissed')) {
+                    console.log('Showing install prompt');
                     installPrompt.classList.add('show');
                 }
             }, 3000);
         });
+
+        // Check installability on load
+        window.addEventListener('load', () => {
+            setTimeout(checkPWAInstallability, 1000);
+            
+            // Show manual install button if no automatic prompt
+            setTimeout(() => {
+                if (!deferredPrompt) {
+                    document.getElementById('manualInstall').style.display = 'block';
+                }
+            }, 5000);
+        });
+
+        // Manual install info function
+        function showManualInstallInfo() {
+            const info = `
+PWA Install Requirements:
+✅ HTTPS or localhost
+✅ Valid manifest.json
+✅ Service worker registered
+✅ At least one icon (192x192 or 512x512)
+✅ display: standalone in manifest
+✅ beforeinstallprompt event
+
+Current Status:
+- Service Worker: ${'serviceWorker' in navigator ? '✅' : '❌'}
+- Manifest: ${document.querySelector('link[rel="manifest"]') ? '✅' : '❌'}
+- Icons: ${document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]').length > 0 ? '✅' : '❌'}
+- HTTPS/localhost: ${window.location.protocol === 'https:' || window.location.hostname === 'localhost' ? '✅' : '❌'}
+
+To install manually:
+1. Chrome: Click the install icon in address bar
+2. Safari: Share > Add to Home Screen
+3. Firefox: Click the install icon in address bar
+            `;
+            alert(info);
+        }
 
         installBtn.addEventListener('click', async () => {
             if (deferredPrompt) {
