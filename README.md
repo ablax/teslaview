@@ -10,6 +10,14 @@ The application is deployed and ready to use! Simply visit the link above to sta
 
 ## Features
 
+### Progressive Web App (PWA)
+- **Offline functionality** - App interface works without internet after first visit
+- **Installable** - Add to home screen like a native app
+- **Automatic caching** - App resources (HTML, CSS, JS) cached for offline use
+- **Update notifications** - Get notified when new versions are available
+- **App-like experience** - Full-screen mode without browser UI
+- **Cross-platform** - Works on desktop, mobile, and tablets
+
 ### Core Video Playback
 - **Multi-camera video playback** - View front, left, right, and rear camera feeds simultaneously
 - **Drag & drop file selection** - Easy file loading with visual feedback
@@ -72,9 +80,11 @@ npm run dev
 **Option 1: Use the Live Demo**
 - Visit [https://teslaview.vercel.app/](https://teslaview.vercel.app/)
 - No installation required - works directly in your browser
+- **PWA Installation**: Click the install prompt or use browser's "Add to Home Screen" option
 
 **Option 2: Run Locally**
 - Follow the installation instructions below
+- **Offline Mode**: After first visit, the app interface works without internet connection
 
 ### Loading Videos
 
@@ -85,6 +95,8 @@ npm run dev
    - RecentClips, SavedClips, or SentryClips subdirectories
 3. **Select directory** - Use "Select Directory" for entire folder loading
 4. **Drag & drop** - Alternatively, drag video files or folders directly onto the upload area
+
+**💡 Offline Tip**: The app interface and resources are cached for offline use. You can disconnect from the internet and still access the app, but you'll need to reload your video files when you go offline.
 
 ### Video Playback
 
@@ -150,10 +162,15 @@ tesla-cam-player/
 
 ## Browser Compatibility
 
-- **Safari** - Best support for H.265 videos and video recording
-- **Firefox** - Good support for H.265 videos and video recording
-- **Chrome** - Limited H.265 support (may need extensions), good video recording
-- **Edge** - Limited H.265 support (may need extensions), good video recording
+- **Safari** - Best support for H.265 videos, video recording, and PWA features
+- **Firefox** - Good support for H.265 videos, video recording, and PWA features
+- **Chrome** - Limited H.265 support (may need extensions), good video recording and PWA features
+- **Edge** - Limited H.265 support (may need extensions), good video recording and PWA features
+
+### PWA Support
+- **Installation**: All modern browsers support PWA installation
+- **Offline mode**: Works in all browsers with service worker support
+- **App-like experience**: Full-screen mode available on all platforms
 
 ## TeslaCam File Naming
 
@@ -195,6 +212,12 @@ Videos are automatically grouped into events based on:
 
 ## Troubleshooting
 
+### PWA Installation Issues
+- **Install prompt not showing**: Check browser console for PWA requirements
+- **Icons not loading**: Ensure all icon files are accessible
+- **Service worker not registering**: Check for HTTPS/localhost requirement
+- **Manual installation**: Use browser's "Add to Home Screen" option
+
 ### Videos won't play
 - Ensure you're using a compatible browser (Safari/Firefox for H.265)
 - Check that video files are not corrupted
@@ -218,6 +241,11 @@ Videos are automatically grouped into events based on:
 - Ensure browser supports MediaRecorder API
 - Check browser permissions for file downloads
 - Try using Safari or Firefox for best compatibility
+
+### Offline Mode Issues
+- **App not working offline**: Ensure you've visited the site at least once while online
+- **App resources not loading**: Check browser storage permissions
+- **Service worker not updating**: Clear browser cache and reload
 
 ## API Endpoints
 
@@ -244,6 +272,7 @@ This project is licensed under the ISC License.
 - Uses Font Awesome for icons
 - Modern CSS Grid and Flexbox for responsive layouts
 - HTML5 Canvas and MediaRecorder API for video processing
+- Progressive Web App (PWA) technology for offline functionality
 
 ## Support
 
@@ -253,6 +282,14 @@ For issues or questions:
 3. Verify your TeslaCam files are properly formatted
 4. Check the browser console for error messages
 5. Test video editing features with shorter clips first
+6. For PWA issues, check browser console for installability requirements
+
+### Offline Usage
+- **First visit**: Always visit the site once while online to cache app resources
+- **Subsequent visits**: App interface works offline with cached resources
+- **Video processing**: All video editing works offline once videos are loaded
+- **Video files**: Must be reloaded when going offline (not cached by service worker)
+- **Updates**: App will notify you when new versions are available
 
 ## Live Demo
 
