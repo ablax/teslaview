@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Directory Selection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-area { border: 2px dashed #ccc; padding: 20px; margin: 20px 0; }
+        .file-list { margin-top: 20px; }
+        .file-item { padding: 5px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <h1>Directory Selection Test</h1>
+    
+    <div class="test-area">
+        <h3>Test Directory Selection</h3>
+        <input type="file" id="dirInput" webkitdirectory directory>
+        <p>Select a directory to test the functionality</p>
+    </div>
+    
+    <div class="file-list" id="fileList">
+        <h3>Selected Files:</h3>
+        <div id="fileCount">No files selected</div>
+        <div id="fileDetails"></div>
+    </div>
+
+    <script>
+        document.getElementById('dirInput').addEventListener('change', function(event) {
+            const files = Array.from(event.target.files);
+            const videoFiles = files.filter(file => file.type.startsWith('video/'));
+            
+            document.getElementById('fileCount').textContent = 
+                `Total files: ${files.length}, Video files: ${videoFiles.length}`;
+            
+            const fileDetails = document.getElementById('fileDetails');
+            fileDetails.innerHTML = '';
+            
+            videoFiles.forEach(file => {
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `
+                    <strong>${file.name}</strong><br>
+                    Path: ${file.webkitRelativePath}<br>
+                    Size: ${(file.size / 1024 / 1024).toFixed(2)} MB<br>
+                    Type: ${file.type}
+                `;
+                fileDetails.appendChild(div);
+            });
+        });
+    </script>
+</body>
+</html> 

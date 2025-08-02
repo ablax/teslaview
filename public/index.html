@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeslaCam Video Player</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fas fa-video"></i> TeslaCam Video Player</h1>
+            <p>Easily view TeslaCam videos from Dashcam or Sentry Mode</p>
+        </header>
+
+        <!-- File Selection Area -->
+        <div class="file-selection" id="fileSelection">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-content">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <h3>Select TeslaCam Files</h3>
+                    <p>Drag and drop folders or video files here, or use the buttons below</p>
+                    <p class="subtitle">Supports: TeslaCam, RecentClips, SavedClips, SentryClips directories</p>
+                    <input type="file" id="fileInput" multiple accept="video/*" style="display: none;" webkitdirectory directory>
+                    <input type="file" id="dirInput" webkitdirectory directory style="display: none;">
+                    <div class="button-group">
+                        <button class="browse-btn" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-file-video"></i> Select Video Files
+                        </button>
+                        <button class="browse-btn secondary" onclick="document.getElementById('dirInput').click()">
+                            <i class="fas fa-folder-open"></i> Select Directory
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video Player Area -->
+        <div class="video-container" id="videoContainer" style="display: none;">
+            <!-- Controls -->
+            <div class="controls">
+                <div class="control-group">
+                    <button id="playPauseBtn" class="control-btn">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button id="prevBtn" class="control-btn">
+                        <i class="fas fa-step-backward"></i>
+                    </button>
+                    <button id="nextBtn" class="control-btn">
+                        <i class="fas fa-step-forward"></i>
+                    </button>
+                </div>
+                
+                <div class="control-group">
+                    <span class="speed-label">Speed:</span>
+                    <button class="speed-btn" data-speed="0.5">0.5x</button>
+                    <button class="speed-btn active" data-speed="1">1x</button>
+                    <button class="speed-btn" data-speed="2">2x</button>
+                    <button class="speed-btn" data-speed="4">4x</button>
+                </div>
+
+                <div class="control-group">
+                    <span class="event-info" id="eventInfo">Event: 0/0</span>
+                    <select id="eventSelect" class="event-select">
+                        <option value="">Select Event...</option>
+                    </select>
+                    <button id="jumpToEventBtn" class="control-btn" style="display: none;">
+                        <i class="fas fa-jump-forward"></i> Jump to Event
+                    </button>
+                </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="timeline-container">
+                <input type="range" id="timeline" class="timeline" min="0" max="100" value="0">
+                <div class="time-display">
+                    <span id="currentTime">00:00</span> / <span id="totalTime">00:00</span>
+                </div>
+                <div class="timeline-controls">
+                    <button id="setStartBtn" class="timeline-btn">
+                        <i class="fas fa-play"></i> Set Start
+                    </button>
+                    <button id="setEndBtn" class="timeline-btn">
+                        <i class="fas fa-stop"></i> Set End
+                    </button>
+                    <button id="spliceBtn" class="timeline-btn primary">
+                        <i class="fas fa-cut"></i> Splice Clip
+                    </button>
+                </div>
+            </div>
+
+            <!-- Video Grid -->
+            <div class="video-grid" id="videoGrid">
+                <!-- Videos will be dynamically added here -->
+            </div>
+            
+            <!-- Download Overlay -->
+            <div class="download-overlay" id="downloadOverlay" style="display: none;">
+                <div class="download-panel">
+                    <h3>Download Video</h3>
+                    <div class="download-info">
+                        <span id="downloadFileName">video.mp4</span>
+                        <span id="downloadCamera">Camera: Front</span>
+                    </div>
+                    <div class="download-actions">
+                        <button id="downloadBtn" class="download-btn">
+                            <i class="fas fa-download"></i> Download Video
+                        </button>
+                        <button id="closeDownloadBtn" class="close-btn">
+                            <i class="fas fa-times"></i> Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Info -->
+            <div class="video-info">
+                <div class="info-item">
+                    <span class="label">Files loaded:</span>
+                    <span id="fileCount">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Events detected:</span>
+                    <span id="eventCount">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Custom clips:</span>
+                    <span id="clipCount">0</span>
+                </div>
+            </div>
+            
+            <!-- Custom Clips Section -->
+            <div class="custom-clips" id="customClips" style="display: none;">
+                <h3><i class="fas fa-cut"></i> Custom Clips</h3>
+                <div class="clips-container" id="clipsContainer">
+                    <!-- Custom clips will be added here -->
+                </div>
+                <div class="combine-controls">
+                    <button id="selectClipsBtn" class="combine-btn">
+                        <i class="fas fa-check-square"></i> Select Clips
+                    </button>
+                    <button id="combineBtn" class="combine-btn primary" style="display: none;">
+                        <i class="fas fa-link"></i> Combine Selected
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="instructions">
+            <h3><i class="fas fa-info-circle"></i> How to Use</h3>
+            <ol>
+                <li>Insert your TeslaCam USB drive into your computer</li>
+                <li>Click "Select Directory" to choose the entire TeslaCam folder or subdirectories (RecentClips, SavedClips, SentryClips)</li>
+                <li>Alternatively, click "Select Video Files" to choose individual video files</li>
+                <li>You can also drag and drop entire folders or individual files</li>
+                <li>Videos will automatically play in your browser</li>
+                <li>Use the controls to navigate between events and adjust playback speed</li>
+                <li>Click on any video to enlarge it</li>
+            </ol>
+            <div class="browser-note">
+                <strong>Note:</strong> For best compatibility with H.265 videos, use Safari or Firefox browsers.
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html> 
