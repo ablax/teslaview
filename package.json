@@ -8,9 +8,17 @@
     "dev": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["tesla", "dashcam", "sentry", "video", "player"],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["tesla", "dashcam", "sentry", "video", "player", "video-editing", "tesla-cam"],
+  "author": "TeslaCam Video Player Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ablax/teslaview.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ablax/teslaview/issues"
+  },
+  "homepage": "https://github.com/ablax/teslaview#readme",
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
