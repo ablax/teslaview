@@ -1,9 +1,10 @@
 # TeslaCam Video Player
 
-A modern web application for viewing TeslaCam videos from Dashcam or Sentry Mode, similar to [sentrycam.video](https://sentrycam.video/). Built with Node.js and vanilla JavaScript.
+A modern web application for viewing, editing, and creating custom clips from TeslaCam videos from Dashcam or Sentry Mode, similar to [sentrycam.video](https://sentrycam.video/). Built with Node.js and vanilla JavaScript.
 
 ## Features
 
+### Core Video Playback
 - **Multi-camera video playback** - View front, left, right, and rear camera feeds simultaneously
 - **Drag & drop file selection** - Easy file loading with visual feedback
 - **Event-based organization** - Automatically groups videos by timestamp/incident
@@ -13,6 +14,15 @@ A modern web application for viewing TeslaCam videos from Dashcam or Sentry Mode
 - **Click to enlarge** - Focus on individual camera feeds
 - **Local file processing** - No uploads, all processing happens in your browser
 - **Memory efficient** - Uses object URLs for optimal performance
+
+### Advanced Video Editing
+- **Video splicing** - Create custom clips by setting start and end times
+- **Timeline controls** - Set precise start/end points for clips
+- **Custom clip management** - Organize and view all your created clips
+- **Multi-clip combining** - Select and merge multiple clips into longer videos
+- **Individual camera downloads** - Download specific camera feeds from any clip
+- **MP4 export** - Download clips in high-quality MP4 format
+- **Clip selection mode** - Easily select multiple clips for combining
 
 ## Prerequisites
 
@@ -52,11 +62,12 @@ npm run dev
 ### Loading Videos
 
 1. **Insert your TeslaCam USB drive** into your computer
-2. **Browse for files** - Click the "Browse Files" button and select:
+2. **Browse for files** - Click the "Select Video Files" button and select:
    - Individual video files
    - TeslaCam directory
    - RecentClips, SavedClips, or SentryClips subdirectories
-3. **Drag & drop** - Alternatively, drag video files directly onto the upload area
+3. **Select directory** - Use "Select Directory" for entire folder loading
+4. **Drag & drop** - Alternatively, drag video files or folders directly onto the upload area
 
 ### Video Playback
 
@@ -66,11 +77,35 @@ npm run dev
 - **Event navigation** - Use Previous/Next buttons or the event dropdown
 - **Jump to event** - For Sentry Mode events, jump to the critical moment
 
+### Video Splicing & Editing
+
+#### Creating Custom Clips
+1. **Navigate to an event** with the video you want to edit
+2. **Play the video** and find the section you want to clip
+3. **Set start time** - Click "Set Start" at the beginning of your desired clip
+4. **Set end time** - Click "Set End" at the end of your desired clip
+5. **Create splice** - Click "Splice Clip" to create a custom clip
+6. **View your clip** - The new clip appears in the "Custom Clips" section
+
+#### Managing Custom Clips
+- **Clip counter** - Shows total number of custom clips created
+- **Clip information** - Duration, time range, and camera count
+- **Individual downloads** - Download buttons for each camera (Front, Left, Right, Rear)
+- **MP4 format** - All downloads are in high-quality MP4 format
+
+#### Combining Multiple Clips
+1. **Create several spliced clips** using the process above
+2. **Enter selection mode** - Click "Select Clips" button
+3. **Choose clips** - Check the clips you want to combine
+4. **Combine clips** - Click "Combine Selected" to merge them
+5. **Download combined video** - Use the download buttons for the combined clip
+
 ### Camera Views
 
 - **Side-by-side layout** - All cameras display simultaneously
 - **Click to enlarge** - Click any camera video to focus on it
 - **Click again** - Return to side-by-side layout
+- **Download individual cameras** - Download specific camera feeds
 
 ## File Structure
 
@@ -98,10 +133,10 @@ tesla-cam-player/
 
 ## Browser Compatibility
 
-- **Safari** - Best support for H.265 videos
-- **Firefox** - Good support for H.265 videos
-- **Chrome** - Limited H.265 support (may need extensions)
-- **Edge** - Limited H.265 support (may need extensions)
+- **Safari** - Best support for H.265 videos and video recording
+- **Firefox** - Good support for H.265 videos and video recording
+- **Chrome** - Limited H.265 support (may need extensions), good video recording
+- **Edge** - Limited H.265 support (may need extensions), good video recording
 
 ## TeslaCam File Naming
 
@@ -111,6 +146,7 @@ The application automatically detects camera types based on common TeslaCam nami
 - **Left camera**: `*left*`, `*l_*`, `*_l_*`
 - **Right camera**: `*right*`, `*r_*`, `*_r_*`
 - **Rear camera**: `*back*`, `*rear*`, `*b_*`, `*_b_*`
+- **Additional cameras**: `*top*`, `*bottom*`, `*center*`, `*side*`
 
 ## Event Detection
 
@@ -118,6 +154,27 @@ Videos are automatically grouped into events based on:
 - Timestamp proximity (within 1 minute)
 - File naming patterns
 - Typical TeslaCam clip durations
+- Hidden file filtering (macOS ._ files)
+
+## Video Editing Features
+
+### Splicing System
+- **Precise timing** - Set exact start/end times for clips
+- **Multi-camera support** - Creates clips for all cameras simultaneously
+- **Visual feedback** - Clear indication of selected times
+- **Error handling** - Validates start/end times and selection
+
+### Combining System
+- **Multi-clip selection** - Choose any number of clips to combine
+- **Camera grouping** - Combines clips by camera type
+- **Sequential processing** - Plays each clip segment in order
+- **Single output** - Creates one continuous video file
+
+### Download System
+- **MP4 format** - High-quality video output
+- **Smart naming** - Clear file names with clip info
+- **Individual cameras** - Download specific camera feeds
+- **Combined videos** - Download merged clips as single files
 
 ## Troubleshooting
 
@@ -134,6 +191,16 @@ Videos are automatically grouped into events based on:
 ### Camera detection issues
 - Ensure video files follow TeslaCam naming conventions
 - Manually rename files if needed to include camera identifiers
+
+### Splicing issues
+- Make sure start time is before end time
+- Check that videos are fully loaded before splicing
+- Try refreshing the page if splicing controls don't respond
+
+### Download issues
+- Ensure browser supports MediaRecorder API
+- Check browser permissions for file downloads
+- Try using Safari or Firefox for best compatibility
 
 ## API Endpoints
 
@@ -156,9 +223,10 @@ This project is licensed under the ISC License.
 ## Acknowledgments
 
 - Inspired by [sentrycam.video](https://sentrycam.video/)
-- Built for Tesla owners to easily view their dashcam and sentry footage
+- Built for Tesla owners to easily view, edit, and create custom clips from their dashcam and sentry footage
 - Uses Font Awesome for icons
 - Modern CSS Grid and Flexbox for responsive layouts
+- HTML5 Canvas and MediaRecorder API for video processing
 
 ## Support
 
@@ -167,6 +235,7 @@ For issues or questions:
 2. Ensure you're using a compatible browser
 3. Verify your TeslaCam files are properly formatted
 4. Check the browser console for error messages
+5. Test video editing features with shorter clips first
 
 ---
 

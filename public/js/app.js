@@ -1019,38 +1019,49 @@ class TeslaCamPlayer {
             });
         });
 
-        // Create combined clips for each camera
-        Object.keys(clipsByCamera).forEach(camera => {
+        // Create one combined clip with all cameras
+        const allCameras = Object.keys(clipsByCamera);
+        const totalDuration = Math.max(...allCameras.map(camera => 
+            clipsByCamera[camera].reduce((sum, clip) => sum + clip.duration, 0)
+        ));
+        
+        // Calculate overall start and end times for display
+        const allStartTimes = allCameras.flatMap(camera => 
+            clipsByCamera[camera].map(clip => clip.spliceStart || 0)
+        );
+        const allEndTimes = allCameras.flatMap(camera => 
+            clipsByCamera[camera].map(clip => clip.spliceEnd || clip.duration)
+        );
+        const startTime = Math.min(...allStartTimes);
+        const endTime = Math.max(...allEndTimes);
+        
+        // Create video objects for each camera
+        const videoObjects = allCameras.map(camera => {
             const cameraClips = clipsByCamera[camera];
-            const totalDuration = cameraClips.reduce((sum, clip) => sum + clip.duration, 0);
+            const cameraDuration = cameraClips.reduce((sum, clip) => sum + clip.duration, 0);
             
-            // Calculate overall start and end times for display
-            const startTime = Math.min(...cameraClips.map(clip => clip.spliceStart || 0));
-            const endTime = Math.max(...cameraClips.map(clip => clip.spliceEnd || clip.duration));
-            
-            // Create a video object for this camera (similar to regular clips)
-            const videoObject = {
+            return {
                 camera: camera,
                 spliceStart: startTime,
                 spliceEnd: endTime,
-                duration: totalDuration,
+                duration: cameraDuration,
                 isCombined: true
             };
-            
-            const combinedClip = {
-                id: Date.now() + Math.random(),
-                name: `Combined_${camera}_${this.customClipsArray.length + 1}`,
-                videos: [videoObject], // Use videos array like regular clips
-                clips: cameraClips, // Keep original clips for processing
-                duration: totalDuration,
-                startTime: startTime,
-                endTime: endTime,
-                timestamp: new Date(),
-                isCombined: true
-            };
-
-            this.customClipsArray.push(combinedClip);
         });
+        
+        const combinedClip = {
+            id: Date.now() + Math.random(),
+            name: `Combined_${this.customClipsArray.length + 1}`,
+            videos: videoObjects, // All cameras in one clip
+            clips: selectedClipData, // Keep original clips for processing
+            duration: totalDuration,
+            startTime: startTime,
+            endTime: endTime,
+            timestamp: new Date(),
+            isCombined: true
+        };
+
+        this.customClipsArray.push(combinedClip);
 
         this.updateClipCount();
         this.renderCustomClips();
