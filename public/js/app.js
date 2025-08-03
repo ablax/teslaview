@@ -1,7 +1,7 @@
 class TeslaCamPlayer {
     constructor() {
         // Production mode flag - set to true to disable console logs
-        this.isProduction = false; // Set to true for production
+        this.isProduction = true; // Set to true for production
         
         this.videos = [];
         this.events = [];
@@ -1890,41 +1890,66 @@ class TeslaCamPlayer {
     renderEventSelectionList() {
         this.selectedEventsList.innerHTML = '';
         
+        // Create dropdown container
+        const dropdownContainer = document.createElement('div');
+        dropdownContainer.className = 'event-dropdown-container';
+        
+        // Create dropdown button
+        const dropdownButton = document.createElement('button');
+        dropdownButton.className = 'event-dropdown-btn';
+        dropdownButton.innerHTML = `
+            <i class="fas fa-chevron-down"></i>
+            Select Events (${this.selectedEvents.length} selected)
+        `;
+        dropdownButton.onclick = () => this.toggleEventDropdown();
+        
+        // Create dropdown content
+        const dropdownContent = document.createElement('div');
+        dropdownContent.className = 'event-dropdown-content';
+        dropdownContent.id = 'eventDropdownContent';
+        
+        // Add select all/none buttons
+        const selectAllContainer = document.createElement('div');
+        selectAllContainer.className = 'select-all-container';
+        selectAllContainer.innerHTML = `
+            <button class="select-all-btn" onclick="teslaCamPlayer.selectAllEvents()">
+                <i class="fas fa-check-square"></i> Select All
+            </button>
+            <button class="select-none-btn" onclick="teslaCamPlayer.selectNoEvents()">
+                <i class="fas fa-square"></i> Select None
+            </button>
+        `;
+        dropdownContent.appendChild(selectAllContainer);
+        
+        // Add event checkboxes
         this.events.forEach((event, index) => {
             const eventItem = document.createElement('div');
-            eventItem.className = 'event-item';
+            eventItem.className = 'event-checkbox-item';
             
-            // Calculate duration with better handling
-            const duration = this.calculateEventDuration(event.videos) / 1000;
-            const durationText = duration > 0 ? this.formatTime(duration) : 'Loading...';
+            // Get unique cameras for this event
+            const uniqueCameras = [...new Set(event.videos.map(v => v.camera))];
+            const cameraText = uniqueCameras.length === 1 ? 'camera' : 'cameras';
             
             eventItem.innerHTML = `
-                <div class="event-info">
-                    <div class="event-name">Event ${index + 1}</div>
-                    <div class="event-details">
-                        ${event.videos.length} cameras • ${durationText}
-                    </div>
-                </div>
-                <div class="event-downloads">
-                    <button class="event-download-btn" onclick="teslaCamPlayer.toggleEventSelection(${index})">
-                        <i class="fas fa-${this.selectedEvents.includes(index) ? 'check' : 'plus'}"></i>
-                        ${this.selectedEvents.includes(index) ? 'Selected' : 'Select'}
-                    </button>
-                </div>
+                <label class="event-checkbox-label">
+                    <input type="checkbox" 
+                           class="event-checkbox" 
+                           value="${index}"
+                           ${this.selectedEvents.includes(index) ? 'checked' : ''}
+                           onchange="teslaCamPlayer.toggleEventSelection(${index})">
+                    <span class="event-checkbox-text">
+                        <strong>Event ${index + 1}</strong>
+                        <span class="event-details">${event.videos.length} videos • ${uniqueCameras.length} ${cameraText}</span>
+                        <span class="event-timestamp">${event.timestamp.toLocaleString()}</span>
+                    </span>
+                </label>
             `;
-            this.selectedEventsList.appendChild(eventItem);
-            
-            // If duration is still loading, try to update it when video loads
-            if (duration <= 0 && event.videos.length > 0) {
-                const firstVideo = event.videos[0];
-                if (firstVideo.video) {
-                    firstVideo.video.addEventListener('loadedmetadata', () => {
-                        // Re-render the list to show updated duration
-                        this.renderEventSelectionList();
-                    }, { once: true });
-                }
-            }
+            dropdownContent.appendChild(eventItem);
         });
+        
+        dropdownContainer.appendChild(dropdownButton);
+        dropdownContainer.appendChild(dropdownContent);
+        this.selectedEventsList.appendChild(dropdownContainer);
     }
 
     toggleEventSelection(eventIndex) {
@@ -1937,8 +1962,49 @@ class TeslaCamPlayer {
             this.selectedEvents.push(eventIndex);
         }
         
-        this.renderEventSelectionList();
+        // Update the dropdown button text and checkbox states without re-rendering
+        this.updateDropdownButtonText();
+        this.updateCheckboxStates();
         this.updateCombineButton();
+    }
+    
+    toggleEventDropdown() {
+        const dropdownContent = document.getElementById('eventDropdownContent');
+        if (dropdownContent) {
+            dropdownContent.classList.toggle('show');
+        }
+    }
+    
+    selectAllEvents() {
+        this.selectedEvents = this.events.map((_, index) => index);
+        this.updateDropdownButtonText();
+        this.updateCheckboxStates();
+        this.updateCombineButton();
+    }
+    
+    selectNoEvents() {
+        this.selectedEvents = [];
+        this.updateDropdownButtonText();
+        this.updateCheckboxStates();
+        this.updateCombineButton();
+    }
+    
+    updateDropdownButtonText() {
+        const dropdownButton = document.querySelector('.event-dropdown-btn');
+        if (dropdownButton) {
+            dropdownButton.innerHTML = `
+                <i class="fas fa-chevron-down"></i>
+                Select Events (${this.selectedEvents.length} selected)
+            `;
+        }
+    }
+    
+    updateCheckboxStates() {
+        // Update all checkbox states without re-rendering
+        const checkboxes = document.querySelectorAll('.event-checkbox');
+        checkboxes.forEach((checkbox, index) => {
+            checkbox.checked = this.selectedEvents.includes(index);
+        });
     }
 
     updateCombineButton() {
@@ -1965,19 +2031,16 @@ class TeslaCamPlayer {
             cameras: new Set()
         };
 
-        // Calculate total duration and collect all cameras
-        let totalDuration = 0;
+        // Collect all cameras and estimate total duration
         this.selectedEvents.forEach(eventIndex => {
             const event = this.events[eventIndex];
-            // Calculate actual duration from videos, not use the hardcoded duration property
-            const eventDuration = this.calculateEventDuration(event.videos);
-            this.log(`Event ${eventIndex} calculated duration:`, eventDuration, 'ms');
-            totalDuration += eventDuration;
             event.videos.forEach(video => combinedEvent.cameras.add(video.camera));
         });
 
-        combinedEvent.totalDuration = totalDuration;
-        combinedEvent.totalDurationSeconds = totalDuration / 1000;
+        // Estimate total duration based on number of events (typical TeslaCam events are ~1 minute)
+        const estimatedDurationPerEvent = 60000; // 1 minute in milliseconds
+        combinedEvent.totalDuration = this.selectedEvents.length * estimatedDurationPerEvent;
+        combinedEvent.totalDurationSeconds = combinedEvent.totalDuration / 1000;
 
         combinedEvent.cameras = Array.from(combinedEvent.cameras);
 
@@ -2002,7 +2065,6 @@ class TeslaCamPlayer {
                     <div class="combined-event-count">${combinedEvent.events.length} events</div>
                 </div>
                 <div class="combined-event-details">
-                    <div>Duration: ${this.formatTime(combinedEvent.totalDurationSeconds)}</div>
                     <div>Cameras: ${combinedEvent.cameras.join(', ')}</div>
                 </div>
                 <div class="combined-event-downloads">

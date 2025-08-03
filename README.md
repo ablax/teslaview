@@ -38,6 +38,21 @@ The application is deployed and ready to use! Simply visit the link above to sta
 - **MP4 export** - Download clips in high-quality MP4 format
 - **Clip selection mode** - Easily select multiple clips for combining
 
+### Event Combination System
+- **Multi-event selection** - Select multiple events to combine into longer videos
+- **Intuitive dropdown interface** - Checkbox dropdown for easy event selection
+- **Bulk operations** - Select all/none events with single clicks
+- **Camera-specific downloads** - Download combined events for specific cameras
+- **Seamless transitions** - No delays between event segments in combined videos
+- **Smart event grouping** - Automatically detects and groups related events
+
+### Performance Optimizations
+- **WebCodecs API support** - Hardware-accelerated video processing when available
+- **Automatic fallback** - Falls back to Canvas/MediaRecorder for compatibility
+- **Production mode** - Toggle console logging for development/production
+- **Optimized video processing** - Faster video combining and splicing
+- **Memory management** - Automatic cleanup of video elements and object URLs
+
 ## Prerequisites
 
 - Node.js (version 14 or higher)
@@ -71,6 +86,14 @@ The application is deployed and ready to use! Simply visit the link above to sta
 For development with auto-restart on file changes:
 ```bash
 npm run dev
+```
+
+### Production Mode
+Toggle console logging by changing `this.isProduction` in the constructor:
+```javascript
+// In public/js/app.js constructor
+this.isProduction = false; // Development mode - shows console logs
+this.isProduction = true;  // Production mode - hides console logs
 ```
 
 ## Usage
@@ -129,6 +152,25 @@ npm run dev
 4. **Combine clips** - Click "Combine Selected" to merge them
 5. **Download combined video** - Use the download buttons for the combined clip
 
+### Event Combination
+
+#### Combining Multiple Events
+1. **Load your TeslaCam files** - The app will automatically group videos into events
+2. **Enter event selection mode** - Click "Select Events" button
+3. **Choose events** - Use the dropdown to select events you want to combine:
+   - **Dropdown interface** - Click "Select Events" to open the dropdown
+   - **Checkbox selection** - Check individual events or use "Select All"/"Select None"
+   - **Event information** - See video count, camera count, and timestamps
+4. **Combine events** - Click "Combine Events" to create a combined event
+5. **Download combined video** - Use camera-specific download buttons
+
+#### Event Selection Interface
+- **Intuitive dropdown** - Compact interface for selecting from many events
+- **Bulk operations** - Select all events or clear all selections
+- **Real-time feedback** - See selection count in dropdown button
+- **Event details** - View video count, camera count, and timestamps
+- **Persistent selection** - Dropdown stays open during selection
+
 ### Camera Views
 
 - **Side-by-side layout** - All cameras display simultaneously
@@ -147,8 +189,11 @@ tesla-cam-player/
     ├── index.html        # Main HTML page
     ├── css/
     │   └── styles.css    # Application styles
-    └── js/
-        └── app.js        # Main application logic
+    ├── js/
+    │   └── app.js        # Main application logic
+    ├── manifest.json     # PWA manifest
+    ├── sw.js            # Service worker
+    └── icons/           # PWA icons
 ```
 
 ## Supported Video Formats
@@ -171,6 +216,12 @@ tesla-cam-player/
 - **Installation**: All modern browsers support PWA installation
 - **Offline mode**: Works in all browsers with service worker support
 - **App-like experience**: Full-screen mode available on all platforms
+
+### WebCodecs Support
+- **Safari**: Full WebCodecs support for hardware acceleration
+- **Chrome**: Full WebCodecs support (version 94+)
+- **Firefox**: Limited WebCodecs support
+- **Fallback**: Automatic fallback to Canvas/MediaRecorder for compatibility
 
 ## TeslaCam File Naming
 
@@ -197,18 +248,37 @@ Videos are automatically grouped into events based on:
 - **Multi-camera support** - Creates clips for all cameras simultaneously
 - **Visual feedback** - Clear indication of selected times
 - **Error handling** - Validates start/end times and selection
+- **Hidden video processing** - Uses dedicated video elements for accurate splicing
 
 ### Combining System
 - **Multi-clip selection** - Choose any number of clips to combine
+- **Multi-event selection** - Combine entire events into longer videos
 - **Camera grouping** - Combines clips by camera type
 - **Sequential processing** - Plays each clip segment in order
 - **Single output** - Creates one continuous video file
+- **Seamless transitions** - No delays between segments
 
 ### Download System
 - **MP4 format** - High-quality video output
 - **Smart naming** - Clear file names with clip info
 - **Individual cameras** - Download specific camera feeds
 - **Combined videos** - Download merged clips as single files
+- **WebCodecs optimization** - Hardware-accelerated processing when available
+
+## Performance Features
+
+### WebCodecs Integration
+- **Hardware acceleration** - Uses GPU for video processing when available
+- **Automatic detection** - Checks for WebCodecs API support
+- **Graceful fallback** - Falls back to Canvas/MediaRecorder if not supported
+- **Optimized encoding** - Prioritizes MP4 format with high bitrates
+- **Faster processing** - Significantly faster video combining and splicing
+
+### Production Mode
+- **Development mode** - Full console logging for debugging
+- **Production mode** - Clean console output for end users
+- **Easy toggle** - Single line change to switch modes
+- **Performance optimization** - No logging overhead in production
 
 ## Troubleshooting
 
@@ -227,6 +297,7 @@ Videos are automatically grouped into events based on:
 - Close other browser tabs/applications
 - Reduce the number of simultaneous video files
 - Use lower playback speeds
+- Check if WebCodecs is available in your browser
 
 ### Camera detection issues
 - Ensure video files follow TeslaCam naming conventions
@@ -236,11 +307,19 @@ Videos are automatically grouped into events based on:
 - Make sure start time is before end time
 - Check that videos are fully loaded before splicing
 - Try refreshing the page if splicing controls don't respond
+- Ensure you're using the correct video (not currently displayed event)
 
 ### Download issues
 - Ensure browser supports MediaRecorder API
 - Check browser permissions for file downloads
 - Try using Safari or Firefox for best compatibility
+- Check if WebCodecs is available for faster processing
+
+### Event combination issues
+- Ensure you've selected at least 2 events to combine
+- Check that events contain videos for the camera you're trying to download
+- Try refreshing the page if event selection doesn't work
+- Use the dropdown interface for easier event selection
 
 ### Offline Mode Issues
 - **App not working offline**: Ensure you've visited the site at least once while online
@@ -273,6 +352,7 @@ This project is licensed under the ISC License.
 - Modern CSS Grid and Flexbox for responsive layouts
 - HTML5 Canvas and MediaRecorder API for video processing
 - Progressive Web App (PWA) technology for offline functionality
+- WebCodecs API for hardware-accelerated video processing
 
 ## Support
 
@@ -283,6 +363,7 @@ For issues or questions:
 4. Check the browser console for error messages
 5. Test video editing features with shorter clips first
 6. For PWA issues, check browser console for installability requirements
+7. For performance issues, check WebCodecs support in your browser
 
 ### Offline Usage
 - **First visit**: Always visit the site once while online to cache app resources
@@ -291,11 +372,17 @@ For issues or questions:
 - **Video files**: Must be reloaded when going offline (not cached by service worker)
 - **Updates**: App will notify you when new versions are available
 
+### Performance Tips
+- **Use WebCodecs**: Enable hardware acceleration for faster video processing
+- **Browser choice**: Use Safari or Firefox for best H.265 support
+- **Memory management**: Close other tabs when processing large videos
+- **Production mode**: Enable production mode for optimal performance
+
 ## Live Demo
 
 **Try the application online:** [https://teslaview.vercel.app/](https://teslaview.vercel.app/)
 
-The live demo is fully functional and supports all features including video splicing, combining, and downloading.
+The live demo is fully functional and supports all features including video splicing, combining, event combination, and downloading.
 
 ---
 
