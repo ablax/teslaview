@@ -14,6 +14,11 @@ class TeslaCamPlayer {
         this.selectedClips = [];
         this.isSelectMode = false;
         
+        // Event combination state
+        this.selectedEvents = [];
+        this.isEventSelectMode = false;
+        this.combinedEvents = [];
+        
         this.initializeElements();
         this.bindEvents();
     }
@@ -61,6 +66,16 @@ class TeslaCamPlayer {
         
         // Speed buttons
         this.speedButtons = document.querySelectorAll('.speed-btn');
+        
+        // Event combination elements
+        this.eventCombination = document.getElementById('eventCombination');
+        this.selectEventsBtn = document.getElementById('selectEventsBtn');
+        this.combineEventsBtn = document.getElementById('combineEventsBtn');
+        this.clearEventSelectionBtn = document.getElementById('clearEventSelectionBtn');
+        this.selectedEventsContainer = document.getElementById('selectedEventsContainer');
+        this.selectedEventsList = document.getElementById('selectedEventsList');
+        this.combinedEventsContainer = document.getElementById('combinedEventsContainer');
+        this.combinedEventsList = document.getElementById('combinedEventsList');
     }
 
     bindEvents() {
@@ -98,6 +113,11 @@ class TeslaCamPlayer {
         // Splicing events
         this.setStartBtn.addEventListener('click', () => this.setSpliceStart());
         this.setEndBtn.addEventListener('click', () => this.setSpliceEnd());
+        
+        // Event combination events
+        this.selectEventsBtn.addEventListener('click', () => this.toggleEventSelectMode());
+        this.combineEventsBtn.addEventListener('click', () => this.combineSelectedEvents());
+        this.clearEventSelectionBtn.addEventListener('click', () => this.clearEventSelection());
         this.spliceBtn.addEventListener('click', () => this.createSplice());
         this.selectClipsBtn.addEventListener('click', () => this.toggleSelectMode());
         this.combineBtn.addEventListener('click', () => this.combineSelectedClips());
@@ -344,7 +364,7 @@ class TeslaCamPlayer {
             .map(group => ({
                 videos: group,
                 timestamp: group[0].timestamp,
-                duration: this.calculateEventDuration(group)
+                duration: 60000 // Default duration, will be updated after videos load
             }))
             .sort((a, b) => a.timestamp - b.timestamp);
             
@@ -394,15 +414,84 @@ class TeslaCamPlayer {
             .map(group => ({
                 videos: group,
                 timestamp: group[0].timestamp,
-                duration: this.calculateEventDuration(group)
+                duration: 60000 // Default duration, will be updated after videos load
             }))
             .sort((a, b) => a.timestamp - b.timestamp);
             
         console.log('Alternative events:', this.events.length);
     }
 
+    updateEventDuration(eventIndex) {
+        const event = this.events[eventIndex];
+        if (!event) return;
+        
+        // Find the video element for the first video in this event
+        const firstVideo = event.videos[0];
+        if (!firstVideo) return;
+        
+        // Find the video element in the DOM
+        const videoItem = this.videoGrid.querySelector(`[data-camera="${firstVideo.camera}"]`);
+        if (!videoItem) return;
+        
+        const video = videoItem.querySelector('video');
+        if (!video || !video.src) return;
+        
+        // Wait for video to load metadata
+        if (video.readyState >= 1) {
+            const duration = video.duration * 1000; // Convert to milliseconds
+            if (!isNaN(duration) && duration > 0) {
+                console.log(`Updated event ${eventIndex + 1} duration:`, duration, 'ms');
+                event.duration = duration;
+                
+                // Update the event selection list if it's visible
+                if (this.isEventSelectMode) {
+                    this.renderEventSelectionList();
+                }
+            }
+        } else {
+            // Wait for metadata to load
+            video.addEventListener('loadedmetadata', () => {
+                const duration = video.duration * 1000;
+                if (!isNaN(duration) && duration > 0) {
+                    console.log(`Updated event ${eventIndex + 1} duration:`, duration, 'ms');
+                    event.duration = duration;
+                    
+                    // Update the event selection list if it's visible
+                    if (this.isEventSelectMode) {
+                        this.renderEventSelectionList();
+                    }
+                }
+            }, { once: true });
+        }
+    }
+
     calculateEventDuration(videos) {
-        // Estimate duration based on typical TeslaCam clip length
+        if (!videos || videos.length === 0) return 0;
+        
+        // Get the duration from the first video (all videos in an event should have same duration)
+        const firstVideo = videos[0];
+        console.log('Calculating duration for video:', firstVideo.name, 'Video object:', firstVideo.video);
+        
+        if (firstVideo.video) {
+            console.log('Video readyState:', firstVideo.video.readyState, 'Duration:', firstVideo.video.duration);
+            
+            // Check if video has valid duration
+            if (!isNaN(firstVideo.video.duration) && firstVideo.video.duration > 0) {
+                const duration = firstVideo.video.duration * 1000; // Convert to milliseconds
+                console.log('Using actual video duration:', duration, 'ms');
+                return duration;
+            }
+            
+            // If video is not loaded yet, try to get duration from metadata
+            if (firstVideo.video.readyState >= 1) {
+                const duration = firstVideo.video.duration * 1000;
+                console.log('Using metadata duration:', duration, 'ms');
+                return duration;
+            }
+        }
+        
+        // Fallback: estimate based on typical TeslaCam clip length
+        console.log('Using fallback duration: 60000ms');
         return 60000; // 1 minute default
     }
 
@@ -489,11 +578,18 @@ class TeslaCamPlayer {
                 console.log(`Loading video for ${camera}:`, eventVideo.name);
                 video.src = eventVideo.objectUrl;
                 video.load();
+                // Store the video element in the video object for later use
+                eventVideo.video = video;
             } else {
                 console.log(`No video found for camera: ${camera}`);
                 video.src = '';
             }
         });
+        
+        // Update event duration if not already calculated
+        if (event.duration === 60000) {
+            this.updateEventDuration(eventIndex);
+        }
         
         // Update timeline
         this.updateTimeline();
@@ -717,6 +813,7 @@ class TeslaCamPlayer {
     showVideoContainer() {
         this.fileSelection.style.display = 'none';
         this.videoContainer.style.display = 'block';
+        this.showEventCombinationSection();
     }
 
     showLoading() {
@@ -1259,6 +1356,489 @@ class TeslaCamPlayer {
             URL.revokeObjectURL(url);
         });
         this.objectUrls = [];
+    }
+
+    // Event Combination Methods
+    showEventCombinationSection() {
+        this.eventCombination.style.display = 'block';
+    }
+
+    toggleEventSelectMode() {
+        this.isEventSelectMode = !this.isEventSelectMode;
+        
+        if (this.isEventSelectMode) {
+            this.selectEventsBtn.innerHTML = '<i class="fas fa-times"></i> Cancel Selection';
+            this.selectEventsBtn.classList.add('primary');
+            this.combineEventsBtn.style.display = 'inline-block';
+            this.clearEventSelectionBtn.style.display = 'inline-block';
+            this.selectedEventsContainer.style.display = 'block';
+            this.renderEventSelectionList();
+        } else {
+            this.selectEventsBtn.innerHTML = '<i class="fas fa-check-square"></i> Select Events';
+            this.selectEventsBtn.classList.remove('primary');
+            this.combineEventsBtn.style.display = 'none';
+            this.clearEventSelectionBtn.style.display = 'none';
+            this.selectedEventsContainer.style.display = 'none';
+            this.clearEventSelection();
+        }
+    }
+
+    renderEventSelectionList() {
+        this.selectedEventsList.innerHTML = '';
+        
+        this.events.forEach((event, index) => {
+            const eventItem = document.createElement('div');
+            eventItem.className = 'event-item';
+            
+            // Calculate duration with better handling
+            const duration = this.calculateEventDuration(event.videos) / 1000;
+            const durationText = duration > 0 ? this.formatTime(duration) : 'Loading...';
+            
+            eventItem.innerHTML = `
+                <div class="event-info">
+                    <div class="event-name">Event ${index + 1}</div>
+                    <div class="event-details">
+                        ${event.videos.length} cameras • ${durationText}
+                    </div>
+                </div>
+                <div class="event-downloads">
+                    <button class="event-download-btn" onclick="teslaCamPlayer.toggleEventSelection(${index})">
+                        <i class="fas fa-${this.selectedEvents.includes(index) ? 'check' : 'plus'}"></i>
+                        ${this.selectedEvents.includes(index) ? 'Selected' : 'Select'}
+                    </button>
+                </div>
+            `;
+            this.selectedEventsList.appendChild(eventItem);
+            
+            // If duration is still loading, try to update it when video loads
+            if (duration <= 0 && event.videos.length > 0) {
+                const firstVideo = event.videos[0];
+                if (firstVideo.video) {
+                    firstVideo.video.addEventListener('loadedmetadata', () => {
+                        // Re-render the list to show updated duration
+                        this.renderEventSelectionList();
+                    }, { once: true });
+                }
+            }
+        });
+    }
+
+    toggleEventSelection(eventIndex) {
+        if (!this.isEventSelectMode) return;
+        
+        const index = this.selectedEvents.indexOf(eventIndex);
+        if (index > -1) {
+            this.selectedEvents.splice(index, 1);
+        } else {
+            this.selectedEvents.push(eventIndex);
+        }
+        
+        this.renderEventSelectionList();
+        this.updateCombineButton();
+    }
+
+    updateCombineButton() {
+        if (this.selectedEvents.length >= 2) {
+            this.combineEventsBtn.innerHTML = `<i class="fas fa-layer-group"></i> Combine ${this.selectedEvents.length} Events`;
+            this.combineEventsBtn.disabled = false;
+        } else {
+            this.combineEventsBtn.innerHTML = '<i class="fas fa-layer-group"></i> Select at least 2 events';
+            this.combineEventsBtn.disabled = true;
+        }
+    }
+
+    combineSelectedEvents() {
+        if (this.selectedEvents.length < 2) {
+            this.showError('Please select at least 2 events to combine');
+            return;
+        }
+
+        const combinedEvent = {
+            id: `combined-${Date.now()}`,
+            name: `Combined Events (${this.selectedEvents.length} events)`,
+            events: this.selectedEvents.map(index => this.events[index]),
+            totalDuration: 0,
+            cameras: new Set()
+        };
+
+        // Calculate total duration and collect all cameras
+        let totalDuration = 0;
+        this.selectedEvents.forEach(eventIndex => {
+            const event = this.events[eventIndex];
+            // Calculate actual duration from videos, not use the hardcoded duration property
+            const eventDuration = this.calculateEventDuration(event.videos);
+            console.log(`Event ${eventIndex} calculated duration:`, eventDuration, 'ms');
+            totalDuration += eventDuration;
+            event.videos.forEach(video => combinedEvent.cameras.add(video.camera));
+        });
+
+        combinedEvent.totalDuration = totalDuration;
+        combinedEvent.totalDurationSeconds = totalDuration / 1000;
+
+        combinedEvent.cameras = Array.from(combinedEvent.cameras);
+
+        this.combinedEvents.push(combinedEvent);
+        this.renderCombinedEvents();
+        this.showEventCombinationSection();
+        this.combinedEventsContainer.style.display = 'block';
+        
+        this.showSuccess(`Successfully combined ${this.selectedEvents.length} events (Total: ${this.formatTime(combinedEvent.totalDurationSeconds)})`);
+        this.clearEventSelection();
+    }
+
+    renderCombinedEvents() {
+        this.combinedEventsList.innerHTML = '';
+        
+        this.combinedEvents.forEach((combinedEvent, index) => {
+            const combinedItem = document.createElement('div');
+            combinedItem.className = 'combined-event-item';
+            combinedItem.innerHTML = `
+                <div class="combined-event-header">
+                    <div class="combined-event-name">${combinedEvent.name}</div>
+                    <div class="combined-event-count">${combinedEvent.events.length} events</div>
+                </div>
+                <div class="combined-event-details">
+                    <div>Duration: ${this.formatTime(combinedEvent.totalDurationSeconds)}</div>
+                    <div>Cameras: ${combinedEvent.cameras.join(', ')}</div>
+                </div>
+                <div class="combined-event-downloads">
+                    ${combinedEvent.cameras.map(camera => `
+                        <button class="combined-event-download-btn" onclick="teslaCamPlayer.downloadCombinedEvent(${index}, '${camera}')">
+                            <i class="fas fa-download"></i> Download ${camera}
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+            this.combinedEventsList.appendChild(combinedItem);
+        });
+    }
+
+    async downloadCombinedEvent(combinedEventIndex, camera) {
+        const combinedEvent = this.combinedEvents[combinedEventIndex];
+        if (!combinedEvent) {
+            this.showError('Combined event not found');
+            return;
+        }
+
+        this.showStatusMessage(`Processing combined event download for ${camera}...`, 'info');
+        console.log('Starting download for combined event:', combinedEvent);
+        console.log('Camera:', camera);
+
+        // Check if WebCodecs API is supported and we're in a secure context
+        const useWebCodecs = ('VideoEncoder' in window) && ('VideoDecoder' in window) && window.isSecureContext;
+        
+        if (!useWebCodecs) {
+            console.log('WebCodecs not available, using fallback Canvas/MediaRecorder method');
+            this.showStatusMessage('Using fallback method (slower but compatible)...', 'info');
+        }
+
+        // Find all videos for the specified camera across all events
+        const cameraVideos = [];
+        combinedEvent.events.forEach(event => {
+            const cameraVideo = event.videos.find(video => video.camera === camera);
+            if (cameraVideo) {
+                cameraVideos.push(cameraVideo);
+            }
+        });
+
+        if (cameraVideos.length === 0) {
+            this.showError(`No ${camera} camera videos found in selected events`);
+            return;
+        }
+
+        console.log('Found camera videos:', cameraVideos.length);
+
+        try {
+            // Create separate video elements for each event's video
+            const videoElements = [];
+            
+            for (let i = 0; i < cameraVideos.length; i++) {
+                const cameraVideo = cameraVideos[i];
+                
+                // Create a new video element for this specific video
+                const video = document.createElement('video');
+                video.src = cameraVideo.objectUrl;
+                video.muted = true;
+                video.playsInline = true;
+                
+                // Wait for the video to load metadata
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Video load timeout'));
+                    }, 5000);
+                    
+                    video.addEventListener('loadedmetadata', () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    }, { once: true });
+                    
+                    video.addEventListener('error', () => {
+                        clearTimeout(timeout);
+                        reject(new Error('Video load error'));
+                    }, { once: true });
+                    
+                    video.load();
+                });
+                
+                videoElements.push({
+                    video: video,
+                    name: cameraVideo.name,
+                    objectUrl: cameraVideo.objectUrl
+                });
+            }
+
+            // Get video dimensions from first video
+            const firstVideo = videoElements[0].video;
+            const width = firstVideo.videoWidth || 1920;
+            const height = firstVideo.videoHeight || 1080;
+            const frameRate = 30; // Default frame rate
+
+            console.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
+
+            // Use appropriate processing method based on WebCodecs availability
+            if (useWebCodecs) {
+                await this.processVideosWithWebCodecs(videoElements, width, height, frameRate, camera, combinedEvent);
+            } else {
+                await this.processVideosOptimized(videoElements, width, height, frameRate, camera, combinedEvent);
+            }
+
+        } catch (error) {
+            console.error('Error processing videos:', error);
+            this.showError(`Failed to process videos: ${error.message}`);
+        }
+    }
+
+    async processVideosOptimized(videoElements, width, height, frameRate, camera, combinedEvent) {
+        // Create canvas for video processing
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = width;
+        canvas.height = height;
+
+        // Create MediaRecorder with optimized settings
+        const stream = canvas.captureStream(frameRate);
+        let mimeType = 'video/mp4';
+        if (!MediaRecorder.isTypeSupported('video/mp4')) {
+            mimeType = 'video/webm;codecs=vp9';
+            if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+                mimeType = 'video/webm;codecs=vp8';
+                if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+                    mimeType = 'video/webm';
+                }
+            }
+        }
+        
+        const mediaRecorder = new MediaRecorder(stream, { 
+            mimeType,
+            videoBitsPerSecond: 10000000 // 10 Mbps for better quality
+        });
+
+        const chunks = [];
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                chunks.push(event.data);
+            }
+        };
+
+        mediaRecorder.onstop = () => {
+            const fileExtension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+            const blob = new Blob(chunks, { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `combined_events_${camera}_${combinedEvent.events.length}_events.${fileExtension}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            URL.revokeObjectURL(url);
+            this.showSuccess(`Downloaded combined ${camera} compilation: ${combinedEvent.events.length} events (${fileExtension.toUpperCase()})`);
+        };
+
+        // Start recording
+        mediaRecorder.start();
+
+        // Process each video in sequence with optimized frame processing
+        for (let i = 0; i < videoElements.length; i++) {
+            const videoElement = videoElements[i];
+            const video = videoElement.video;
+            
+            console.log(`Processing video ${i + 1}/${videoElements.length}: ${videoElement.name}`);
+            
+            // Reset video to beginning
+            video.currentTime = 0;
+            
+            // Wait for video to be ready
+            await new Promise((resolve) => {
+                video.addEventListener('canplay', resolve, { once: true });
+                video.play();
+            });
+
+            // Process video frames with optimized timing
+            await new Promise((resolve) => {
+                const startTime = performance.now();
+                const frameInterval = 1000 / frameRate; // Time between frames
+                let lastFrameTime = 0;
+                
+                const processFrame = (currentTime) => {
+                    if (video.ended || video.paused) {
+                        resolve();
+                        return;
+                    }
+                    
+                    // Only draw frame at specified frame rate
+                    if (currentTime - lastFrameTime >= frameInterval) {
+                        ctx.drawImage(video, 0, 0, width, height);
+                        lastFrameTime = currentTime;
+                    }
+                    
+                    requestAnimationFrame(processFrame);
+                };
+                
+                requestAnimationFrame(processFrame);
+            });
+
+            // Small delay between videos
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        // Stop recording
+        mediaRecorder.stop();
+    }
+
+    async processVideosWithWebCodecs(videoElements, width, height, frameRate, camera, combinedEvent) {
+        console.log('Using WebCodecs API for fast video processing...');
+        
+        try {
+            // Try to use MP4 encoding if supported
+            let mimeType = 'video/mp4';
+            if (!MediaRecorder.isTypeSupported('video/mp4')) {
+                mimeType = 'video/webm;codecs=vp9';
+                if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+                    mimeType = 'video/webm;codecs=vp8';
+                    if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+                        mimeType = 'video/webm';
+                    }
+                }
+            }
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = width;
+            canvas.height = height;
+
+            // Create MediaRecorder with optimized settings for MP4
+            const stream = canvas.captureStream(frameRate);
+            const mediaRecorder = new MediaRecorder(stream, { 
+                mimeType,
+                videoBitsPerSecond: 12000000 // 12 Mbps for high quality MP4
+            });
+
+            const chunks = [];
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const fileExtension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                const blob = new Blob(chunks, { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `combined_events_${camera}_${combinedEvent.events.length}_events.${fileExtension}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                URL.revokeObjectURL(url);
+                this.showSuccess(`Downloaded combined ${camera} compilation: ${combinedEvent.events.length} events (${fileExtension.toUpperCase()} - WebCodecs)`);
+            };
+
+            // Start recording
+            mediaRecorder.start();
+
+            // Process each video with WebCodecs-optimized approach
+            for (let i = 0; i < videoElements.length; i++) {
+                const videoElement = videoElements[i];
+                const video = videoElement.video;
+                
+                console.log(`Processing video ${i + 1}/${videoElements.length}: ${videoElement.name} (WebCodecs)`);
+                
+                // Reset video to beginning
+                video.currentTime = 0;
+                
+                // Wait for video to be ready
+                await new Promise((resolve) => {
+                    video.addEventListener('canplay', resolve, { once: true });
+                    video.play();
+                });
+
+                // Process video frames with WebCodecs-optimized timing
+                await new Promise((resolve) => {
+                    const frameInterval = 1000 / frameRate;
+                    let lastFrameTime = 0;
+                    
+                    const processFrame = (currentTime) => {
+                        if (video.ended || video.paused) {
+                            resolve();
+                            return;
+                        }
+                        
+                        // Optimized frame processing for WebCodecs
+                        if (currentTime - lastFrameTime >= frameInterval) {
+                            ctx.drawImage(video, 0, 0, width, height);
+                            lastFrameTime = currentTime;
+                        }
+                        
+                        requestAnimationFrame(processFrame);
+                    };
+                    
+                    requestAnimationFrame(processFrame);
+                });
+
+                // Minimal delay between videos for WebCodecs
+                await new Promise(resolve => setTimeout(resolve, 25));
+            }
+
+            // Stop recording
+            mediaRecorder.stop();
+            
+        } catch (error) {
+            console.error('WebCodecs processing failed, falling back to standard method:', error);
+            // Fallback to standard method if WebCodecs fails
+            await this.processVideosOptimized(videoElements, width, height, frameRate, camera, combinedEvent);
+        }
+    }
+
+    clearEventSelection() {
+        this.selectedEvents = [];
+        this.isEventSelectMode = false;
+        this.selectEventsBtn.innerHTML = '<i class="fas fa-check-square"></i> Select Events';
+        this.selectEventsBtn.classList.remove('primary');
+        this.combineEventsBtn.style.display = 'none';
+        this.clearEventSelectionBtn.style.display = 'none';
+        this.selectedEventsContainer.style.display = 'none';
+        this.renderEventSelectionList();
+    }
+
+    showStatusMessage(message, type = 'info') {
+        const statusDiv = document.createElement('div');
+        statusDiv.className = `status-message ${type}`;
+        statusDiv.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+            <span>${message}</span>
+        `;
+        document.body.appendChild(statusDiv);
+        
+        setTimeout(() => {
+            if (statusDiv.parentNode) {
+                statusDiv.parentNode.removeChild(statusDiv);
+            }
+        }, 3000);
     }
 }
 

@@ -175,6 +175,38 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Event Combination Section -->
+            <div class="event-combination" id="eventCombination" style="display: none;">
+                <h3><i class="fas fa-layer-group"></i> Event Combination</h3>
+                <p class="section-description">Select multiple events to combine them into a single downloadable compilation.</p>
+                
+                <div class="event-selection-controls">
+                    <button id="selectEventsBtn" class="combine-btn">
+                        <i class="fas fa-check-square"></i> Select Events
+                    </button>
+                    <button id="combineEventsBtn" class="combine-btn primary" style="display: none;">
+                        <i class="fas fa-layer-group"></i> Combine Selected Events
+                    </button>
+                    <button id="clearEventSelectionBtn" class="combine-btn secondary" style="display: none;">
+                        <i class="fas fa-times"></i> Clear Selection
+                    </button>
+                </div>
+
+                <div class="selected-events-container" id="selectedEventsContainer" style="display: none;">
+                    <h4>Selected Events:</h4>
+                    <div class="selected-events-list" id="selectedEventsList">
+                        <!-- Selected events will be listed here -->
+                    </div>
+                </div>
+
+                <div class="combined-events-container" id="combinedEventsContainer" style="display: none;">
+                    <h4>Combined Events:</h4>
+                    <div class="combined-events-list" id="combinedEventsList">
+                        <!-- Combined events will be listed here -->
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Instructions -->
