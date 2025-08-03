@@ -1503,6 +1503,13 @@ class TeslaCamPlayer {
                     continue;
                 }
                 
+                // Use the individual clip's splice timing, not the combined clip timing
+                const clipVideoInfo = clipSegment.videos.find(v => v.camera === videoInfo.camera);
+                if (!clipVideoInfo) {
+                    console.error(`Could not find ${videoInfo.camera} camera in clip segment ${i}`);
+                    continue;
+                }
+                
                 console.log(`Creating hidden video for clip segment ${i}: ${originalVideoInfo.name}`);
                 
                 // Create a hidden video element for this clip segment
@@ -1538,7 +1545,8 @@ class TeslaCamPlayer {
                 hiddenVideos.push({
                     video: hiddenVideo,
                     clipSegment: clipSegment,
-                    originalVideoInfo: originalVideoInfo
+                    originalVideoInfo: originalVideoInfo,
+                    clipVideoInfo: clipVideoInfo
                 });
             }
             
@@ -1625,24 +1633,46 @@ class TeslaCamPlayer {
         // Start recording
         mediaRecorder.start();
 
-        // Process each clip segment in sequence with optimized frame processing
-        for (let i = 0; i < hiddenVideos.length; i++) {
-            const hiddenVideoData = hiddenVideos[i];
-            const hiddenVideo = hiddenVideoData.video;
-            const clipSegment = hiddenVideoData.clipSegment;
-            const startTime = clipSegment.spliceStart || 0;
-            const endTime = clipSegment.spliceEnd || clipSegment.duration;
-            
-            console.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video`);
-            
-            // Seek to start time
-            hiddenVideo.currentTime = startTime;
-            
-            // Wait for video to be ready
-            await new Promise((resolve) => {
-                hiddenVideo.addEventListener('canplay', resolve, { once: true });
-                hiddenVideo.play();
-            });
+                    // Process each clip segment in sequence with optimized frame processing
+            for (let i = 0; i < hiddenVideos.length; i++) {
+                const hiddenVideoData = hiddenVideos[i];
+                const hiddenVideo = hiddenVideoData.video;
+                const clipSegment = hiddenVideoData.clipSegment;
+                const clipVideoInfo = hiddenVideoData.clipVideoInfo;
+                const startTime = clipVideoInfo.spliceStart || 0;
+                const endTime = clipVideoInfo.spliceEnd || clipVideoInfo.duration;
+                
+                console.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video`);
+                console.log(`Seeking hidden video ${i} to ${startTime}s`);
+                
+                // Ensure video is ready before seeking
+                if (hiddenVideo.readyState < 2) {
+                    await new Promise((resolve) => {
+                        hiddenVideo.addEventListener('loadeddata', resolve, { once: true });
+                    });
+                }
+                
+                // Seek to start time and wait for seek to complete
+                hiddenVideo.currentTime = startTime;
+                await new Promise((resolve) => {
+                    const seekHandler = () => {
+                        console.log(`Hidden video ${i} seeked to: ${hiddenVideo.currentTime}s`);
+                        resolve();
+                    };
+                    
+                    // Use seeking event if available, otherwise use a timeout
+                    if ('seeking' in hiddenVideo) {
+                        hiddenVideo.addEventListener('seeked', seekHandler, { once: true });
+                    } else {
+                        setTimeout(seekHandler, 100);
+                    }
+                });
+                
+                // Wait for video to be ready to play
+                await new Promise((resolve) => {
+                    hiddenVideo.addEventListener('canplay', resolve, { once: true });
+                    hiddenVideo.play();
+                });
 
             // Process video frames with optimized timing
             await new Promise((resolve) => {
@@ -1735,15 +1765,37 @@ class TeslaCamPlayer {
                 const hiddenVideoData = hiddenVideos[i];
                 const hiddenVideo = hiddenVideoData.video;
                 const clipSegment = hiddenVideoData.clipSegment;
-                const startTime = clipSegment.spliceStart || 0;
-                const endTime = clipSegment.spliceEnd || clipSegment.duration;
+                const clipVideoInfo = hiddenVideoData.clipVideoInfo;
+                const startTime = clipVideoInfo.spliceStart || 0;
+                const endTime = clipVideoInfo.spliceEnd || clipVideoInfo.duration;
                 
                 console.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video (WebCodecs)`);
+                console.log(`Seeking hidden video ${i} to ${startTime}s (WebCodecs)`);
                 
-                // Seek to start time
+                // Ensure video is ready before seeking
+                if (hiddenVideo.readyState < 2) {
+                    await new Promise((resolve) => {
+                        hiddenVideo.addEventListener('loadeddata', resolve, { once: true });
+                    });
+                }
+                
+                // Seek to start time and wait for seek to complete
                 hiddenVideo.currentTime = startTime;
+                await new Promise((resolve) => {
+                    const seekHandler = () => {
+                        console.log(`Hidden video ${i} seeked to: ${hiddenVideo.currentTime}s (WebCodecs)`);
+                        resolve();
+                    };
+                    
+                    // Use seeking event if available, otherwise use a timeout
+                    if ('seeking' in hiddenVideo) {
+                        hiddenVideo.addEventListener('seeked', seekHandler, { once: true });
+                    } else {
+                        setTimeout(seekHandler, 100);
+                    }
+                });
                 
-                // Wait for video to be ready
+                // Wait for video to be ready to play
                 await new Promise((resolve) => {
                     hiddenVideo.addEventListener('canplay', resolve, { once: true });
                     hiddenVideo.play();
