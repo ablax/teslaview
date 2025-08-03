@@ -1,5 +1,8 @@
 class TeslaCamPlayer {
     constructor() {
+        // Production mode flag - set to true to disable console logs
+        this.isProduction = true; // Set to true for production
+        
         this.videos = [];
         this.events = [];
         this.currentEventIndex = 0;
@@ -130,11 +133,11 @@ class TeslaCamPlayer {
 
     handleDirectorySelection(event) {
         const files = Array.from(event.target.files);
-        console.log('Total files selected:', files.length);
+        this.log('Total files selected:', files.length);
         
         // Log all files for debugging
         files.forEach((file, index) => {
-            console.log(`File ${index + 1}:`, {
+            this.log(`File ${index + 1}:`, {
                 name: file.name,
                 type: file.type,
                 path: file.webkitRelativePath,
@@ -151,12 +154,12 @@ class TeslaCamPlayer {
                            file.name.toLowerCase().endsWith('.mkv');
             
             if (isVideo) {
-                console.log('Found video file:', file.name, file.webkitRelativePath);
+                this.log('Found video file:', file.name, file.webkitRelativePath);
             }
             return isVideo;
         });
         
-        console.log('Video files found:', videoFiles.length);
+        this.log('Video files found:', videoFiles.length);
         
         if (videoFiles.length === 0) {
             this.showError('No video files found in the selected directory. Please check that the directory contains video files.');
@@ -237,12 +240,12 @@ class TeslaCamPlayer {
                 timestamp: this.extractTimestamp(file.name)
             };
             
-            console.log('Processed video:', videoInfo.name, 'Camera:', videoInfo.camera);
+            this.log('Processed video:', videoInfo.name, 'Camera:', videoInfo.camera);
             return videoInfo;
         });
 
-        console.log('Total videos processed:', this.videos.length);
-        console.log('Unique cameras found:', [...new Set(this.videos.map(v => v.camera))]);
+        this.log('Total videos processed:', this.videos.length);
+        this.log('Unique cameras found:', [...new Set(this.videos.map(v => v.camera))]);
 
         // Group videos by events
         this.groupVideosByEvents();
@@ -325,12 +328,12 @@ class TeslaCamPlayer {
     }
 
     groupVideosByEvents() {
-        console.log('Grouping videos by events...');
-        console.log('Total videos:', this.videos.length);
+        this.log('Grouping videos by events...');
+        this.log('Total videos:', this.videos.length);
         
         // Log all videos with their timestamps for debugging
         this.videos.forEach((video, index) => {
-            console.log(`Video ${index + 1}:`, {
+            this.log(`Video ${index + 1}:`, {
                 name: video.name,
                 camera: video.camera,
                 timestamp: video.timestamp,
@@ -343,7 +346,7 @@ class TeslaCamPlayer {
         
         // Filter out hidden files before grouping
         const validVideos = this.videos.filter(video => !video.name.startsWith('._'));
-        console.log('Videos after filtering hidden files for grouping:', validVideos.length);
+        this.log('Videos after filtering hidden files for grouping:', validVideos.length);
         
         validVideos.forEach(video => {
             const timestamp = video.timestamp.getTime();
@@ -356,7 +359,7 @@ class TeslaCamPlayer {
             groups[timestampKey].push(video);
         });
 
-        console.log('Initial groups:', Object.keys(groups).length);
+        this.log('Initial groups:', Object.keys(groups).length);
         
         // Convert groups to events
         this.events = Object.values(groups)
@@ -368,9 +371,9 @@ class TeslaCamPlayer {
             }))
             .sort((a, b) => a.timestamp - b.timestamp);
             
-        console.log('Final events:', this.events.length);
+        this.log('Final events:', this.events.length);
         this.events.forEach((event, index) => {
-            console.log(`Event ${index + 1}:`, {
+            this.log(`Event ${index + 1}:`, {
                 timestamp: event.timestamp.toISOString(),
                 videoCount: event.videos.length,
                 cameras: event.videos.map(v => v.camera)
@@ -379,7 +382,7 @@ class TeslaCamPlayer {
         
         // If we only have one event but multiple videos, try alternative grouping
         if (this.events.length === 1 && this.videos.length > 4) {
-            console.log('Only one event detected with many videos, trying alternative grouping...');
+            this.log('Only one event detected with many videos, trying alternative grouping...');
             this.groupVideosByAlternativeMethod();
         }
     }
@@ -406,7 +409,7 @@ class TeslaCamPlayer {
             }
         });
         
-        console.log('Alternative grouping results:', Object.keys(groups).length, 'groups');
+        this.log('Alternative grouping results:', Object.keys(groups).length, 'groups');
         
         // Convert to events
         this.events = Object.values(groups)
@@ -418,7 +421,7 @@ class TeslaCamPlayer {
             }))
             .sort((a, b) => a.timestamp - b.timestamp);
             
-        console.log('Alternative events:', this.events.length);
+        this.log('Alternative events:', this.events.length);
     }
 
     updateEventDuration(eventIndex) {
@@ -440,7 +443,7 @@ class TeslaCamPlayer {
         if (video.readyState >= 1) {
             const duration = video.duration * 1000; // Convert to milliseconds
             if (!isNaN(duration) && duration > 0) {
-                console.log(`Updated event ${eventIndex + 1} duration:`, duration, 'ms');
+                this.log(`Updated event ${eventIndex + 1} duration:`, duration, 'ms');
                 event.duration = duration;
                 
                 // Update the event selection list if it's visible
@@ -453,7 +456,7 @@ class TeslaCamPlayer {
             video.addEventListener('loadedmetadata', () => {
                 const duration = video.duration * 1000;
                 if (!isNaN(duration) && duration > 0) {
-                    console.log(`Updated event ${eventIndex + 1} duration:`, duration, 'ms');
+                    this.log(`Updated event ${eventIndex + 1} duration:`, duration, 'ms');
                     event.duration = duration;
                     
                     // Update the event selection list if it's visible
@@ -470,28 +473,28 @@ class TeslaCamPlayer {
         
         // Get the duration from the first video (all videos in an event should have same duration)
         const firstVideo = videos[0];
-        console.log('Calculating duration for video:', firstVideo.name, 'Video object:', firstVideo.video);
+        this.log('Calculating duration for video:', firstVideo.name, 'Video object:', firstVideo.video);
         
         if (firstVideo.video) {
-            console.log('Video readyState:', firstVideo.video.readyState, 'Duration:', firstVideo.video.duration);
+            this.log('Video readyState:', firstVideo.video.readyState, 'Duration:', firstVideo.video.duration);
             
             // Check if video has valid duration
             if (!isNaN(firstVideo.video.duration) && firstVideo.video.duration > 0) {
                 const duration = firstVideo.video.duration * 1000; // Convert to milliseconds
-                console.log('Using actual video duration:', duration, 'ms');
+                this.log('Using actual video duration:', duration, 'ms');
                 return duration;
             }
             
             // If video is not loaded yet, try to get duration from metadata
             if (firstVideo.video.readyState >= 1) {
                 const duration = firstVideo.video.duration * 1000;
-                console.log('Using metadata duration:', duration, 'ms');
+                this.log('Using metadata duration:', duration, 'ms');
                 return duration;
             }
         }
         
         // Fallback: estimate based on typical TeslaCam clip length
-        console.log('Using fallback duration: 60000ms');
+        this.log('Using fallback duration: 60000ms');
         return 60000; // 1 minute default
     }
 
@@ -504,9 +507,9 @@ class TeslaCamPlayer {
             .map(video => video.camera)
         )];
         
-        console.log('Creating video grid for cameras:', allCameras);
-        console.log('All videos before filtering:', this.videos.map(v => ({ name: v.name, camera: v.camera })));
-        console.log('Videos after filtering hidden files:', this.videos
+        this.log('Creating video grid for cameras:', allCameras);
+        this.log('All videos before filtering:', this.videos.map(v => ({ name: v.name, camera: v.camera })));
+        this.log('Videos after filtering hidden files:', this.videos
             .filter(video => !video.name.startsWith('._'))
             .map(v => ({ name: v.name, camera: v.camera }))
         );
@@ -545,7 +548,7 @@ class TeslaCamPlayer {
             this.videoGrid.appendChild(videoItem);
         });
         
-        console.log(`Created ${allCameras.length} video slots for cameras:`, allCameras);
+        this.log(`Created ${allCameras.length} video slots for cameras:`, allCameras);
     }
 
     loadEvent(eventIndex) {
@@ -554,34 +557,34 @@ class TeslaCamPlayer {
         this.currentEventIndex = eventIndex;
         const event = this.events[eventIndex];
         
-        console.log(`Loading event ${eventIndex + 1} of ${this.events.length}:`, event.timestamp.toLocaleString());
-        console.log('Event videos:', event.videos.map(v => ({ name: v.name, camera: v.camera })));
+        this.log(`Loading event ${eventIndex + 1} of ${this.events.length}:`, event.timestamp.toLocaleString());
+        this.log('Event videos:', event.videos.map(v => ({ name: v.name, camera: v.camera })));
         
         // Filter out hidden files for display
         const validVideos = event.videos.filter(video => !video.name.startsWith('._'));
-        console.log('Valid videos (filtered):', validVideos.map(v => ({ name: v.name, camera: v.camera })));
+        this.log('Valid videos (filtered):', validVideos.map(v => ({ name: v.name, camera: v.camera })));
         
         // Load videos for each camera
         const videoItems = this.videoGrid.querySelectorAll('.video-item');
-        console.log('Video grid items found:', videoItems.length);
+        this.log('Video grid items found:', videoItems.length);
         
         videoItems.forEach(videoItem => {
             const camera = videoItem.dataset.camera;
             const video = videoItem.querySelector('video');
             
-            console.log(`Looking for camera: ${camera}`);
+            this.log(`Looking for camera: ${camera}`);
             
             // Find video for this camera in current event (filter out hidden files)
             const eventVideo = validVideos.find(v => v.camera === camera);
             
             if (eventVideo) {
-                console.log(`Loading video for ${camera}:`, eventVideo.name);
+                this.log(`Loading video for ${camera}:`, eventVideo.name);
                 video.src = eventVideo.objectUrl;
                 video.load();
                 // Store the video element in the video object for later use
                 eventVideo.video = video;
             } else {
-                console.log(`No video found for camera: ${camera}`);
+                this.log(`No video found for camera: ${camera}`);
                 video.src = '';
             }
         });
@@ -667,7 +670,7 @@ class TeslaCamPlayer {
                 // Ensure time is within valid range
                 const clampedTime = Math.max(0, Math.min(time, video.duration));
                 video.currentTime = clampedTime;
-                console.log(`Seeking to ${clampedTime}s (${timeValue})`);
+                this.log(`Seeking to ${clampedTime}s (${timeValue})`);
             }
         });
     }
@@ -676,7 +679,7 @@ class TeslaCamPlayer {
         const videos = this.videoGrid.querySelectorAll('video');
         const mainVideo = videos[0];
         
-        console.log('Updating timeline for video:', mainVideo?.src);
+        this.log('Updating timeline for video:', mainVideo?.src);
         
         if (mainVideo && mainVideo.src) {
             // Remove existing event listeners to prevent duplicates
@@ -702,7 +705,7 @@ class TeslaCamPlayer {
             // Initial update
             this.updateTimeHandler();
             
-            console.log('Timeline setup complete. Max duration:', mainVideo.duration);
+            this.log('Timeline setup complete. Max duration:', mainVideo.duration);
         }
     }
 
@@ -714,19 +717,19 @@ class TeslaCamPlayer {
 
     previousEvent() {
         if (this.currentEventIndex > 0) {
-            console.log(`Navigating to previous event: ${this.currentEventIndex - 1}`);
+            this.log(`Navigating to previous event: ${this.currentEventIndex - 1}`);
             this.loadEvent(this.currentEventIndex - 1);
         } else {
-            console.log('Already at first event');
+            this.log('Already at first event');
         }
     }
 
     nextEvent() {
         if (this.currentEventIndex < this.events.length - 1) {
-            console.log(`Navigating to next event: ${this.currentEventIndex + 1}`);
+            this.log(`Navigating to next event: ${this.currentEventIndex + 1}`);
             this.loadEvent(this.currentEventIndex + 1);
         } else {
-            console.log('Already at last event');
+            this.log('Already at last event');
         }
     }
 
@@ -784,14 +787,14 @@ class TeslaCamPlayer {
             this.jumpToEventBtn.style.display = 'inline-block';
         }
         
-        console.log(`Populated event select with ${this.events.length} events`);
+        this.log(`Populated event select with ${this.events.length} events`);
     }
 
     updateEventDropdown() {
         // Update the dropdown to show the current event
         if (this.currentEventIndex >= 0 && this.currentEventIndex < this.events.length) {
             this.eventSelect.value = this.currentEventIndex.toString();
-            console.log(`Updated dropdown to event ${this.currentEventIndex + 1}`);
+            this.log(`Updated dropdown to event ${this.currentEventIndex + 1}`);
         }
         
         // Update the event info display
@@ -890,7 +893,7 @@ class TeslaCamPlayer {
             this.showSuccess('Video download started!');
             this.hideDownloadOverlay();
         } catch (error) {
-            console.error('Download failed:', error);
+            this.logError('Download failed:', error);
             this.showError('Download failed. Please try again.');
         }
     }
@@ -915,7 +918,7 @@ class TeslaCamPlayer {
             this.setStartBtn.classList.add('active');
             this.setStartBtn.innerHTML = '<i class="fas fa-play"></i> Start: ' + this.formatTime(this.spliceStartTime);
             this.showSuccess(`Start time set to ${this.formatTime(this.spliceStartTime)}`);
-            console.log('Splice start time set to:', this.spliceStartTime);
+            this.log('Splice start time set to:', this.spliceStartTime);
         } else {
             this.showError('No video is currently playing. Please play a video first.');
         }
@@ -938,7 +941,7 @@ class TeslaCamPlayer {
             this.setEndBtn.classList.add('active');
             this.setEndBtn.innerHTML = '<i class="fas fa-stop"></i> End: ' + this.formatTime(this.spliceEndTime);
             this.showSuccess(`End time set to ${this.formatTime(this.spliceEndTime)}`);
-            console.log('Splice end time set to:', this.spliceEndTime);
+            this.log('Splice end time set to:', this.spliceEndTime);
         } else {
             this.showError('No video is currently playing. Please play a video first.');
         }
@@ -1109,7 +1112,7 @@ class TeslaCamPlayer {
             clipElement.classList.toggle('selected', isSelected);
         }
         
-        console.log('Selected clips:', this.selectedClips);
+        this.log('Selected clips:', this.selectedClips);
     }
 
     combineSelectedClips() {
@@ -1188,13 +1191,13 @@ class TeslaCamPlayer {
 
     async downloadSplicedClip(clip, videoInfo) {
         this.showStatusMessage(`Processing spliced clip download for ${videoInfo.camera}...`, 'info');
-        console.log('Starting spliced clip download:', clip.name, 'Camera:', videoInfo.camera);
+        this.log('Starting spliced clip download:', clip.name, 'Camera:', videoInfo.camera);
         
         // Check if WebCodecs API is supported and we're in a secure context
         const useWebCodecs = ('VideoEncoder' in window) && ('VideoDecoder' in window) && window.isSecureContext;
         
         if (!useWebCodecs) {
-            console.log('WebCodecs not available, using fallback Canvas/MediaRecorder method');
+            this.log('WebCodecs not available, using fallback Canvas/MediaRecorder method');
             this.showStatusMessage('Using fallback method (slower but compatible)...', 'info');
         }
 
@@ -1213,7 +1216,7 @@ class TeslaCamPlayer {
                 return;
             }
 
-            console.log(`Found original video: ${originalVideoInfo.name} for camera: ${videoInfo.camera}`);
+            this.log(`Found original video: ${originalVideoInfo.name} for camera: ${videoInfo.camera}`);
 
             // Create a hidden video element for this specific video
             const hiddenVideo = document.createElement('video');
@@ -1224,9 +1227,9 @@ class TeslaCamPlayer {
             hiddenVideo.id = 'hidden-splice-video';
             document.body.appendChild(hiddenVideo);
             
-            console.log('Created hidden video element:', hiddenVideo);
-            console.log('Hidden video src:', hiddenVideo.src);
-            console.log('Original video info:', originalVideoInfo);
+            this.log('Created hidden video element:', hiddenVideo);
+            this.log('Hidden video src:', hiddenVideo.src);
+            this.log('Original video info:', originalVideoInfo);
 
             // Wait for the video to load metadata
             await new Promise((resolve, reject) => {
@@ -1236,31 +1239,31 @@ class TeslaCamPlayer {
                 
                 hiddenVideo.addEventListener('loadedmetadata', () => {
                     clearTimeout(timeout);
-                    console.log('Hidden video metadata loaded');
+                    this.log('Hidden video metadata loaded');
                     resolve();
                 }, { once: true });
                 
                 hiddenVideo.addEventListener('canplay', () => {
-                    console.log('Hidden video can play');
+                    this.log('Hidden video can play');
                 }, { once: true });
                 
                 hiddenVideo.addEventListener('error', (e) => {
                     clearTimeout(timeout);
-                    console.error('Hidden video load error:', e);
+                    this.logError('Hidden video load error:', e);
                     reject(new Error('Video load error'));
                 }, { once: true });
                 
                 hiddenVideo.load();
             });
             
-            console.log(`Hidden video loaded: duration=${hiddenVideo.duration}s, readyState=${hiddenVideo.readyState}`);
+            this.log(`Hidden video loaded: duration=${hiddenVideo.duration}s, readyState=${hiddenVideo.readyState}`);
 
             // Get video dimensions and frame rate
             const width = hiddenVideo.videoWidth || 1920;
             const height = hiddenVideo.videoHeight || 1080;
             const frameRate = 30; // Default frame rate
 
-            console.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
+            this.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
 
             // Use appropriate processing method based on WebCodecs availability
             if (useWebCodecs) {
@@ -1273,7 +1276,7 @@ class TeslaCamPlayer {
             document.body.removeChild(hiddenVideo);
 
         } catch (error) {
-            console.error('Error processing spliced clip:', error);
+            this.logError('Error processing spliced clip:', error);
             this.showError(`Failed to process spliced clip: ${error.message}`);
         }
     }
@@ -1330,17 +1333,17 @@ class TeslaCamPlayer {
         mediaRecorder.start();
 
         // Seek to start time
-        console.log(`Seeking hidden video to ${clip.startTime}s`);
+        this.log(`Seeking hidden video to ${clip.startTime}s`);
         hiddenVideo.currentTime = clip.startTime;
         
         // Wait for video to be ready
         await new Promise((resolve) => {
             hiddenVideo.addEventListener('canplay', resolve, { once: true });
-            console.log('Playing hidden video');
+            this.log('Playing hidden video');
             hiddenVideo.play();
         });
         
-        console.log(`Hidden video current time: ${hiddenVideo.currentTime}s, duration: ${hiddenVideo.duration}s`);
+        this.log(`Hidden video current time: ${hiddenVideo.currentTime}s, duration: ${hiddenVideo.duration}s`);
 
         // Process video frames with optimized timing
         await new Promise((resolve) => {
@@ -1349,7 +1352,7 @@ class TeslaCamPlayer {
             
             const processFrame = (currentTime) => {
                 if (hiddenVideo.currentTime >= clip.endTime || hiddenVideo.ended || hiddenVideo.paused) {
-                    console.log(`Hidden video finished: currentTime=${hiddenVideo.currentTime}s, endTime=${clip.endTime}s`);
+                    this.log(`Hidden video finished: currentTime=${hiddenVideo.currentTime}s, endTime=${clip.endTime}s`);
                     resolve();
                     return;
                 }
@@ -1361,7 +1364,7 @@ class TeslaCamPlayer {
                     
                     // Log progress every second
                     if (Math.floor(hiddenVideo.currentTime) % 1 === 0) {
-                        console.log(`Processing frame: hidden video time=${hiddenVideo.currentTime.toFixed(1)}s`);
+                        this.log(`Processing frame: hidden video time=${hiddenVideo.currentTime.toFixed(1)}s`);
                     }
                 }
                 
@@ -1376,7 +1379,7 @@ class TeslaCamPlayer {
     }
 
     async processSplicedClipWithWebCodecs(clip, videoInfo, hiddenVideo, width, height, frameRate) {
-        console.log('Using WebCodecs API for fast spliced clip processing...');
+        this.log('Using WebCodecs API for fast spliced clip processing...');
         
         try {
             // Try to use MP4 encoding if supported
@@ -1465,7 +1468,7 @@ class TeslaCamPlayer {
             mediaRecorder.stop();
             
         } catch (error) {
-            console.error('WebCodecs processing failed, falling back to standard method:', error);
+            this.logError('WebCodecs processing failed, falling back to standard method:', error);
             // Fallback to standard method if WebCodecs fails
             await this.processSplicedClipOptimized(clip, videoInfo, targetVideo, width, height, frameRate);
         }
@@ -1473,13 +1476,13 @@ class TeslaCamPlayer {
 
     async downloadCombinedClip(clip, videoInfo) {
         this.showStatusMessage(`Processing combined clip download for ${videoInfo.camera}...`, 'info');
-        console.log('Starting combined clip download:', clip.name, 'Camera:', videoInfo.camera);
+        this.log('Starting combined clip download:', clip.name, 'Camera:', videoInfo.camera);
         
         // Check if WebCodecs API is supported and we're in a secure context
         const useWebCodecs = ('VideoEncoder' in window) && ('VideoDecoder' in window) && window.isSecureContext;
         
         if (!useWebCodecs) {
-            console.log('WebCodecs not available, using fallback Canvas/MediaRecorder method');
+            this.log('WebCodecs not available, using fallback Canvas/MediaRecorder method');
             this.showStatusMessage('Using fallback method (slower but compatible)...', 'info');
         }
 
@@ -1493,24 +1496,24 @@ class TeslaCamPlayer {
                 // Find the video for this camera in the original event
                 const originalEvent = this.events[clipSegment.originalEvent];
                 if (!originalEvent) {
-                    console.error(`Original event ${clipSegment.originalEvent} not found for clip segment ${i}`);
+                    this.logError(`Original event ${clipSegment.originalEvent} not found for clip segment ${i}`);
                     continue;
                 }
                 
                 const originalVideoInfo = originalEvent.videos.find(v => v.camera === videoInfo.camera);
                 if (!originalVideoInfo) {
-                    console.error(`Could not find ${videoInfo.camera} camera in original event ${clipSegment.originalEvent}`);
+                    this.logError(`Could not find ${videoInfo.camera} camera in original event ${clipSegment.originalEvent}`);
                     continue;
                 }
                 
                 // Use the individual clip's splice timing, not the combined clip timing
                 const clipVideoInfo = clipSegment.videos.find(v => v.camera === videoInfo.camera);
                 if (!clipVideoInfo) {
-                    console.error(`Could not find ${videoInfo.camera} camera in clip segment ${i}`);
+                    this.logError(`Could not find ${videoInfo.camera} camera in clip segment ${i}`);
                     continue;
                 }
                 
-                console.log(`Creating hidden video for clip segment ${i}: ${originalVideoInfo.name}`);
+                this.log(`Creating hidden video for clip segment ${i}: ${originalVideoInfo.name}`);
                 
                 // Create a hidden video element for this clip segment
                 const hiddenVideo = document.createElement('video');
@@ -1529,13 +1532,13 @@ class TeslaCamPlayer {
                     
                     hiddenVideo.addEventListener('loadedmetadata', () => {
                         clearTimeout(timeout);
-                        console.log(`Hidden video ${i} metadata loaded`);
+                        this.log(`Hidden video ${i} metadata loaded`);
                         resolve();
                     }, { once: true });
                     
                     hiddenVideo.addEventListener('error', (e) => {
                         clearTimeout(timeout);
-                        console.error(`Hidden video ${i} load error:`, e);
+                        this.logError(`Hidden video ${i} load error:`, e);
                         reject(new Error(`Video load error for segment ${i}`));
                     }, { once: true });
                     
@@ -1561,8 +1564,8 @@ class TeslaCamPlayer {
             const height = firstVideo.videoHeight || 1080;
             const frameRate = 30; // Default frame rate
 
-            console.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
-            console.log(`Processing ${hiddenVideos.length} clip segments`);
+            this.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
+            this.log(`Processing ${hiddenVideos.length} clip segments`);
 
             // Use appropriate processing method based on WebCodecs availability
             if (useWebCodecs) {
@@ -1577,7 +1580,7 @@ class TeslaCamPlayer {
             });
 
         } catch (error) {
-            console.error('Error processing combined clip:', error);
+            this.logError('Error processing combined clip:', error);
             this.showError(`Failed to process combined clip: ${error.message}`);
         }
     }
@@ -1642,8 +1645,8 @@ class TeslaCamPlayer {
                 const startTime = clipVideoInfo.spliceStart || 0;
                 const endTime = clipVideoInfo.spliceEnd || clipVideoInfo.duration;
                 
-                console.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video`);
-                console.log(`Seeking hidden video ${i} to ${startTime}s`);
+                this.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video`);
+                this.log(`Seeking hidden video ${i} to ${startTime}s`);
                 
                 // Ensure video is ready before seeking
                 if (hiddenVideo.readyState < 2) {
@@ -1656,7 +1659,7 @@ class TeslaCamPlayer {
                 hiddenVideo.currentTime = startTime;
                 await new Promise((resolve) => {
                     const seekHandler = () => {
-                        console.log(`Hidden video ${i} seeked to: ${hiddenVideo.currentTime}s`);
+                        this.log(`Hidden video ${i} seeked to: ${hiddenVideo.currentTime}s`);
                         resolve();
                     };
                     
@@ -1681,7 +1684,7 @@ class TeslaCamPlayer {
                 
                 const processFrame = (currentTime) => {
                     if (hiddenVideo.currentTime >= endTime || hiddenVideo.ended || hiddenVideo.paused) {
-                        console.log(`Hidden video ${i} finished: currentTime=${hiddenVideo.currentTime}s, endTime=${endTime}s`);
+                        this.log(`Hidden video ${i} finished: currentTime=${hiddenVideo.currentTime}s, endTime=${endTime}s`);
                         resolve();
                         return;
                     }
@@ -1707,7 +1710,7 @@ class TeslaCamPlayer {
     }
 
     async processCombinedClipWithWebCodecs(clip, videoInfo, hiddenVideos, width, height, frameRate) {
-        console.log('Using WebCodecs API for fast combined clip processing...');
+        this.log('Using WebCodecs API for fast combined clip processing...');
         
         try {
             // Try to use MP4 encoding if supported
@@ -1769,8 +1772,8 @@ class TeslaCamPlayer {
                 const startTime = clipVideoInfo.spliceStart || 0;
                 const endTime = clipVideoInfo.spliceEnd || clipVideoInfo.duration;
                 
-                console.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video (WebCodecs)`);
-                console.log(`Seeking hidden video ${i} to ${startTime}s (WebCodecs)`);
+                this.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video (WebCodecs)`);
+                this.log(`Seeking hidden video ${i} to ${startTime}s (WebCodecs)`);
                 
                 // Ensure video is ready before seeking
                 if (hiddenVideo.readyState < 2) {
@@ -1783,7 +1786,7 @@ class TeslaCamPlayer {
                 hiddenVideo.currentTime = startTime;
                 await new Promise((resolve) => {
                     const seekHandler = () => {
-                        console.log(`Hidden video ${i} seeked to: ${hiddenVideo.currentTime}s (WebCodecs)`);
+                        this.log(`Hidden video ${i} seeked to: ${hiddenVideo.currentTime}s (WebCodecs)`);
                         resolve();
                     };
                     
@@ -1808,7 +1811,7 @@ class TeslaCamPlayer {
                     
                     const processFrame = (currentTime) => {
                         if (hiddenVideo.currentTime >= endTime || hiddenVideo.ended || hiddenVideo.paused) {
-                            console.log(`Hidden video ${i} finished: currentTime=${hiddenVideo.currentTime}s, endTime=${endTime}s (WebCodecs)`);
+                            this.log(`Hidden video ${i} finished: currentTime=${hiddenVideo.currentTime}s, endTime=${endTime}s (WebCodecs)`);
                             resolve();
                             return;
                         }
@@ -1833,7 +1836,7 @@ class TeslaCamPlayer {
             mediaRecorder.stop();
             
         } catch (error) {
-            console.error('WebCodecs processing failed, falling back to standard method:', error);
+            this.logError('WebCodecs processing failed, falling back to standard method:', error);
             // Fallback to standard method if WebCodecs fails
             await this.processCombinedClipOptimized(clip, videoInfo, targetVideo, width, height, frameRate);
         }
@@ -1956,7 +1959,7 @@ class TeslaCamPlayer {
             const event = this.events[eventIndex];
             // Calculate actual duration from videos, not use the hardcoded duration property
             const eventDuration = this.calculateEventDuration(event.videos);
-            console.log(`Event ${eventIndex} calculated duration:`, eventDuration, 'ms');
+            this.log(`Event ${eventIndex} calculated duration:`, eventDuration, 'ms');
             totalDuration += eventDuration;
             event.videos.forEach(video => combinedEvent.cameras.add(video.camera));
         });
@@ -2010,14 +2013,14 @@ class TeslaCamPlayer {
         }
 
         this.showStatusMessage(`Processing combined event download for ${camera}...`, 'info');
-        console.log('Starting download for combined event:', combinedEvent);
-        console.log('Camera:', camera);
+        this.log('Starting download for combined event:', combinedEvent);
+        this.log('Camera:', camera);
 
         // Check if WebCodecs API is supported and we're in a secure context
         const useWebCodecs = ('VideoEncoder' in window) && ('VideoDecoder' in window) && window.isSecureContext;
         
         if (!useWebCodecs) {
-            console.log('WebCodecs not available, using fallback Canvas/MediaRecorder method');
+            this.log('WebCodecs not available, using fallback Canvas/MediaRecorder method');
             this.showStatusMessage('Using fallback method (slower but compatible)...', 'info');
         }
 
@@ -2035,7 +2038,7 @@ class TeslaCamPlayer {
             return;
         }
 
-        console.log('Found camera videos:', cameraVideos.length);
+        this.log('Found camera videos:', cameraVideos.length);
 
         try {
             // Create separate video elements for each event's video
@@ -2082,7 +2085,7 @@ class TeslaCamPlayer {
             const height = firstVideo.videoHeight || 1080;
             const frameRate = 30; // Default frame rate
 
-            console.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
+            this.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
 
             // Use appropriate processing method based on WebCodecs availability
             if (useWebCodecs) {
@@ -2092,7 +2095,7 @@ class TeslaCamPlayer {
             }
 
         } catch (error) {
-            console.error('Error processing videos:', error);
+            this.logError('Error processing videos:', error);
             this.showError(`Failed to process videos: ${error.message}`);
         }
     }
@@ -2153,7 +2156,7 @@ class TeslaCamPlayer {
             const videoElement = videoElements[i];
             const video = videoElement.video;
             
-            console.log(`Processing video ${i + 1}/${videoElements.length}: ${videoElement.name}`);
+            this.log(`Processing video ${i + 1}/${videoElements.length}: ${videoElement.name}`);
             
             // Reset video to beginning
             video.currentTime = 0;
@@ -2197,7 +2200,7 @@ class TeslaCamPlayer {
     }
 
     async processVideosWithWebCodecs(videoElements, width, height, frameRate, camera, combinedEvent) {
-        console.log('Using WebCodecs API for fast video processing...');
+        this.log('Using WebCodecs API for fast video processing...');
         
         try {
             // Try to use MP4 encoding if supported
@@ -2255,7 +2258,7 @@ class TeslaCamPlayer {
                 const videoElement = videoElements[i];
                 const video = videoElement.video;
                 
-                console.log(`Processing video ${i + 1}/${videoElements.length}: ${videoElement.name} (WebCodecs)`);
+                this.log(`Processing video ${i + 1}/${videoElements.length}: ${videoElement.name} (WebCodecs)`);
                 
                 // Reset video to beginning
                 video.currentTime = 0;
@@ -2297,7 +2300,7 @@ class TeslaCamPlayer {
             mediaRecorder.stop();
             
         } catch (error) {
-            console.error('WebCodecs processing failed, falling back to standard method:', error);
+            this.logError('WebCodecs processing failed, falling back to standard method:', error);
             // Fallback to standard method if WebCodecs fails
             await this.processVideosOptimized(videoElements, width, height, frameRate, camera, combinedEvent);
         }
@@ -2328,6 +2331,20 @@ class TeslaCamPlayer {
                 statusDiv.parentNode.removeChild(statusDiv);
             }
         }, 3000);
+    }
+    
+    // Helper method for conditional logging
+    log(...args) {
+        if (!this.isProduction) {
+            this.log(...args);
+        }
+    }
+    
+    // Helper method for conditional error logging
+    logError(...args) {
+        if (!this.isProduction) {
+            this.logError(...args);
+        }
     }
 }
 
