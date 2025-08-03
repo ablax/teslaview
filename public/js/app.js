@@ -900,27 +900,47 @@ class TeslaCamPlayer {
     // Splicing Methods
     setSpliceStart() {
         const videos = this.videoGrid.querySelectorAll('video');
-        const mainVideo = videos[0];
+        let mainVideo = null;
         
-        if (mainVideo && mainVideo.currentTime !== undefined) {
+        // Find the first video that has a valid currentTime
+        for (let video of videos) {
+            if (video && video.currentTime !== undefined && !isNaN(video.currentTime)) {
+                mainVideo = video;
+                break;
+            }
+        }
+        
+        if (mainVideo) {
             this.spliceStartTime = mainVideo.currentTime;
             this.setStartBtn.classList.add('active');
             this.setStartBtn.innerHTML = '<i class="fas fa-play"></i> Start: ' + this.formatTime(this.spliceStartTime);
             this.showSuccess(`Start time set to ${this.formatTime(this.spliceStartTime)}`);
             console.log('Splice start time set to:', this.spliceStartTime);
+        } else {
+            this.showError('No video is currently playing. Please play a video first.');
         }
     }
 
     setSpliceEnd() {
         const videos = this.videoGrid.querySelectorAll('video');
-        const mainVideo = videos[0];
+        let mainVideo = null;
         
-        if (mainVideo && mainVideo.currentTime !== undefined) {
+        // Find the first video that has a valid currentTime
+        for (let video of videos) {
+            if (video && video.currentTime !== undefined && !isNaN(video.currentTime)) {
+                mainVideo = video;
+                break;
+            }
+        }
+        
+        if (mainVideo) {
             this.spliceEndTime = mainVideo.currentTime;
             this.setEndBtn.classList.add('active');
             this.setEndBtn.innerHTML = '<i class="fas fa-stop"></i> End: ' + this.formatTime(this.spliceEndTime);
             this.showSuccess(`End time set to ${this.formatTime(this.spliceEndTime)}`);
             console.log('Splice end time set to:', this.spliceEndTime);
+        } else {
+            this.showError('No video is currently playing. Please play a video first.');
         }
     }
 
@@ -1166,42 +1186,121 @@ class TeslaCamPlayer {
         this.showSuccess(`Combined ${this.selectedClips.length} clips into ${Object.keys(clipsByCamera).length} videos`);
     }
 
-    downloadSplicedClip(clip, videoInfo) {
-        // Find the original video element
-        const videoElements = this.videoGrid.querySelectorAll('video');
-        const targetVideo = Array.from(videoElements).find(video => {
-            const videoItem = video.closest('.video-item');
-            const label = videoItem.querySelector('.video-label');
-            return label && label.textContent.includes(videoInfo.camera);
-        });
-
-        if (!targetVideo) {
-            this.showError(`Could not find video for ${videoInfo.camera} camera`);
-            return;
+    async downloadSplicedClip(clip, videoInfo) {
+        this.showStatusMessage(`Processing spliced clip download for ${videoInfo.camera}...`, 'info');
+        console.log('Starting spliced clip download:', clip.name, 'Camera:', videoInfo.camera);
+        
+        // Check if WebCodecs API is supported and we're in a secure context
+        const useWebCodecs = ('VideoEncoder' in window) && ('VideoDecoder' in window) && window.isSecureContext;
+        
+        if (!useWebCodecs) {
+            console.log('WebCodecs not available, using fallback Canvas/MediaRecorder method');
+            this.showStatusMessage('Using fallback method (slower but compatible)...', 'info');
         }
 
-        // Create a canvas to extract the spliced portion
+        try {
+            // Get the original event where the splice was created
+            const originalEvent = this.events[clip.originalEvent];
+            if (!originalEvent) {
+                this.showError('Original event not found');
+                return;
+            }
+
+            // Find the video for this camera in the original event
+            const originalVideoInfo = originalEvent.videos.find(v => v.camera === videoInfo.camera);
+            if (!originalVideoInfo) {
+                this.showError(`Could not find ${videoInfo.camera} camera in original event`);
+                return;
+            }
+
+            console.log(`Found original video: ${originalVideoInfo.name} for camera: ${videoInfo.camera}`);
+
+            // Create a hidden video element for this specific video
+            const hiddenVideo = document.createElement('video');
+            hiddenVideo.src = originalVideoInfo.objectUrl;
+            hiddenVideo.muted = true;
+            hiddenVideo.playsInline = true;
+            hiddenVideo.style.display = 'none';
+            hiddenVideo.id = 'hidden-splice-video';
+            document.body.appendChild(hiddenVideo);
+            
+            console.log('Created hidden video element:', hiddenVideo);
+            console.log('Hidden video src:', hiddenVideo.src);
+            console.log('Original video info:', originalVideoInfo);
+
+            // Wait for the video to load metadata
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Video load timeout'));
+                }, 5000);
+                
+                hiddenVideo.addEventListener('loadedmetadata', () => {
+                    clearTimeout(timeout);
+                    console.log('Hidden video metadata loaded');
+                    resolve();
+                }, { once: true });
+                
+                hiddenVideo.addEventListener('canplay', () => {
+                    console.log('Hidden video can play');
+                }, { once: true });
+                
+                hiddenVideo.addEventListener('error', (e) => {
+                    clearTimeout(timeout);
+                    console.error('Hidden video load error:', e);
+                    reject(new Error('Video load error'));
+                }, { once: true });
+                
+                hiddenVideo.load();
+            });
+            
+            console.log(`Hidden video loaded: duration=${hiddenVideo.duration}s, readyState=${hiddenVideo.readyState}`);
+
+            // Get video dimensions and frame rate
+            const width = hiddenVideo.videoWidth || 1920;
+            const height = hiddenVideo.videoHeight || 1080;
+            const frameRate = 30; // Default frame rate
+
+            console.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
+
+            // Use appropriate processing method based on WebCodecs availability
+            if (useWebCodecs) {
+                await this.processSplicedClipWithWebCodecs(clip, videoInfo, hiddenVideo, width, height, frameRate);
+            } else {
+                await this.processSplicedClipOptimized(clip, videoInfo, hiddenVideo, width, height, frameRate);
+            }
+
+            // Clean up the hidden video element
+            document.body.removeChild(hiddenVideo);
+
+        } catch (error) {
+            console.error('Error processing spliced clip:', error);
+            this.showError(`Failed to process spliced clip: ${error.message}`);
+        }
+    }
+
+    async processSplicedClipOptimized(clip, videoInfo, hiddenVideo, width, height, frameRate) {
+        // Create canvas for video processing
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        
-        // Set canvas size to match video dimensions
-        canvas.width = targetVideo.videoWidth;
-        canvas.height = targetVideo.videoHeight;
+        canvas.width = width;
+        canvas.height = height;
 
-        // Create a MediaRecorder to record the spliced portion
-        const stream = canvas.captureStream();
-        
-        // Try to use MP4-compatible codecs, fallback to WebM if not supported
+        // Create MediaRecorder with optimized settings
+        const stream = canvas.captureStream(frameRate);
         let mimeType = 'video/mp4';
         if (!MediaRecorder.isTypeSupported('video/mp4')) {
             mimeType = 'video/webm;codecs=vp9';
             if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
                 mimeType = 'video/webm;codecs=vp8';
+                if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+                    mimeType = 'video/webm';
+                }
             }
         }
         
-        const mediaRecorder = new MediaRecorder(stream, {
-            mimeType: mimeType
+        const mediaRecorder = new MediaRecorder(stream, { 
+            mimeType,
+            videoBitsPerSecond: 10000000 // 10 Mbps for better quality
         });
 
         const chunks = [];
@@ -1216,7 +1315,6 @@ class TeslaCamPlayer {
             const blob = new Blob(chunks, { type: mimeType });
             const url = URL.createObjectURL(blob);
             
-            // Create download link
             const a = document.createElement('a');
             a.href = url;
             a.download = `${clip.name}_${videoInfo.camera}_${clip.startTime.toFixed(1)}s-${clip.endTime.toFixed(1)}s.${fileExtension}`;
@@ -1224,33 +1322,153 @@ class TeslaCamPlayer {
             a.click();
             document.body.removeChild(a);
             
-            // Clean up
             URL.revokeObjectURL(url);
             this.showSuccess(`Downloaded ${videoInfo.camera} clip: ${clip.name} (${fileExtension.toUpperCase()})`);
         };
 
         // Start recording
         mediaRecorder.start();
-        
-        // Seek to start time and play
-        targetVideo.currentTime = clip.startTime;
-        targetVideo.play();
 
-        // Draw frames to canvas
-        const drawFrame = () => {
-            if (targetVideo.currentTime >= clip.endTime) {
-                mediaRecorder.stop();
-                targetVideo.pause();
-                return;
+        // Seek to start time
+        console.log(`Seeking hidden video to ${clip.startTime}s`);
+        hiddenVideo.currentTime = clip.startTime;
+        
+        // Wait for video to be ready
+        await new Promise((resolve) => {
+            hiddenVideo.addEventListener('canplay', resolve, { once: true });
+            console.log('Playing hidden video');
+            hiddenVideo.play();
+        });
+        
+        console.log(`Hidden video current time: ${hiddenVideo.currentTime}s, duration: ${hiddenVideo.duration}s`);
+
+        // Process video frames with optimized timing
+        await new Promise((resolve) => {
+            const frameInterval = 1000 / frameRate;
+            let lastFrameTime = 0;
+            
+            const processFrame = (currentTime) => {
+                if (hiddenVideo.currentTime >= clip.endTime || hiddenVideo.ended || hiddenVideo.paused) {
+                    console.log(`Hidden video finished: currentTime=${hiddenVideo.currentTime}s, endTime=${clip.endTime}s`);
+                    resolve();
+                    return;
+                }
+                
+                // Only draw frame at specified frame rate
+                if (currentTime - lastFrameTime >= frameInterval) {
+                    ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                    lastFrameTime = currentTime;
+                    
+                    // Log progress every second
+                    if (Math.floor(hiddenVideo.currentTime) % 1 === 0) {
+                        console.log(`Processing frame: hidden video time=${hiddenVideo.currentTime.toFixed(1)}s`);
+                    }
+                }
+                
+                requestAnimationFrame(processFrame);
+            };
+            
+            requestAnimationFrame(processFrame);
+        });
+
+        // Stop recording
+        mediaRecorder.stop();
+    }
+
+    async processSplicedClipWithWebCodecs(clip, videoInfo, hiddenVideo, width, height, frameRate) {
+        console.log('Using WebCodecs API for fast spliced clip processing...');
+        
+        try {
+            // Try to use MP4 encoding if supported
+            let mimeType = 'video/mp4';
+            if (!MediaRecorder.isTypeSupported('video/mp4')) {
+                mimeType = 'video/webm;codecs=vp9';
+                if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+                    mimeType = 'video/webm;codecs=vp8';
+                    if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+                        mimeType = 'video/webm';
+                    }
+                }
             }
             
-            ctx.drawImage(targetVideo, 0, 0, canvas.width, canvas.height);
-            requestAnimationFrame(drawFrame);
-        };
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = width;
+            canvas.height = height;
 
-        targetVideo.addEventListener('canplay', () => {
-            drawFrame();
-        });
+            // Create MediaRecorder with optimized settings for MP4
+            const stream = canvas.captureStream(frameRate);
+            const mediaRecorder = new MediaRecorder(stream, { 
+                mimeType,
+                videoBitsPerSecond: 12000000 // 12 Mbps for high quality MP4
+            });
+
+            const chunks = [];
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const fileExtension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                const blob = new Blob(chunks, { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${clip.name}_${videoInfo.camera}_${clip.startTime.toFixed(1)}s-${clip.endTime.toFixed(1)}s.${fileExtension}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                URL.revokeObjectURL(url);
+                this.showSuccess(`Downloaded ${videoInfo.camera} clip: ${clip.name} (${fileExtension.toUpperCase()} - WebCodecs)`);
+            };
+
+            // Start recording
+            mediaRecorder.start();
+
+            // Seek to start time
+            hiddenVideo.currentTime = clip.startTime;
+            
+            // Wait for video to be ready
+            await new Promise((resolve) => {
+                hiddenVideo.addEventListener('canplay', resolve, { once: true });
+                hiddenVideo.play();
+            });
+
+            // Process video frames with WebCodecs-optimized timing
+            await new Promise((resolve) => {
+                const frameInterval = 1000 / frameRate;
+                let lastFrameTime = 0;
+                
+                const processFrame = (currentTime) => {
+                    if (hiddenVideo.currentTime >= clip.endTime || hiddenVideo.ended || hiddenVideo.paused) {
+                        resolve();
+                        return;
+                    }
+                    
+                    // Optimized frame processing for WebCodecs
+                    if (currentTime - lastFrameTime >= frameInterval) {
+                        ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                        lastFrameTime = currentTime;
+                    }
+                    
+                    requestAnimationFrame(processFrame);
+                };
+                
+                requestAnimationFrame(processFrame);
+            });
+
+            // Stop recording
+            mediaRecorder.stop();
+            
+        } catch (error) {
+            console.error('WebCodecs processing failed, falling back to standard method:', error);
+            // Fallback to standard method if WebCodecs fails
+            await this.processSplicedClipOptimized(clip, videoInfo, targetVideo, width, height, frameRate);
+        }
     }
 
     async downloadCombinedClip(clip, videoInfo) {
@@ -1265,33 +1483,90 @@ class TeslaCamPlayer {
             this.showStatusMessage('Using fallback method (slower but compatible)...', 'info');
         }
 
-        // Find the original video element for this camera
-        const videoElements = this.videoGrid.querySelectorAll('video');
-        const targetVideo = Array.from(videoElements).find(video => {
-            const videoItem = video.closest('.video-item');
-            const label = videoItem.querySelector('.video-label');
-            return label && label.textContent.includes(videoInfo.camera);
-        });
-
-        if (!targetVideo) {
-            this.showError(`Could not find video for ${videoInfo.camera} camera`);
-            return;
-        }
-
         try {
-            // Get video dimensions and frame rate
-            const width = targetVideo.videoWidth || 1920;
-            const height = targetVideo.videoHeight || 1080;
+            // Create hidden video elements for each clip segment
+            const hiddenVideos = [];
+            
+            for (let i = 0; i < clip.clips.length; i++) {
+                const clipSegment = clip.clips[i];
+                
+                // Find the video for this camera in the original event
+                const originalEvent = this.events[clipSegment.originalEvent];
+                if (!originalEvent) {
+                    console.error(`Original event ${clipSegment.originalEvent} not found for clip segment ${i}`);
+                    continue;
+                }
+                
+                const originalVideoInfo = originalEvent.videos.find(v => v.camera === videoInfo.camera);
+                if (!originalVideoInfo) {
+                    console.error(`Could not find ${videoInfo.camera} camera in original event ${clipSegment.originalEvent}`);
+                    continue;
+                }
+                
+                console.log(`Creating hidden video for clip segment ${i}: ${originalVideoInfo.name}`);
+                
+                // Create a hidden video element for this clip segment
+                const hiddenVideo = document.createElement('video');
+                hiddenVideo.src = originalVideoInfo.objectUrl;
+                hiddenVideo.muted = true;
+                hiddenVideo.playsInline = true;
+                hiddenVideo.style.display = 'none';
+                hiddenVideo.id = `hidden-combined-video-${i}`;
+                document.body.appendChild(hiddenVideo);
+                
+                // Wait for the video to load metadata
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error(`Video load timeout for segment ${i}`));
+                    }, 5000);
+                    
+                    hiddenVideo.addEventListener('loadedmetadata', () => {
+                        clearTimeout(timeout);
+                        console.log(`Hidden video ${i} metadata loaded`);
+                        resolve();
+                    }, { once: true });
+                    
+                    hiddenVideo.addEventListener('error', (e) => {
+                        clearTimeout(timeout);
+                        console.error(`Hidden video ${i} load error:`, e);
+                        reject(new Error(`Video load error for segment ${i}`));
+                    }, { once: true });
+                    
+                    hiddenVideo.load();
+                });
+                
+                hiddenVideos.push({
+                    video: hiddenVideo,
+                    clipSegment: clipSegment,
+                    originalVideoInfo: originalVideoInfo
+                });
+            }
+            
+            if (hiddenVideos.length === 0) {
+                this.showError('No valid videos found for combined clip');
+                return;
+            }
+            
+            // Get video dimensions from first video
+            const firstVideo = hiddenVideos[0].video;
+            const width = firstVideo.videoWidth || 1920;
+            const height = firstVideo.videoHeight || 1080;
             const frameRate = 30; // Default frame rate
 
             console.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
+            console.log(`Processing ${hiddenVideos.length} clip segments`);
 
             // Use appropriate processing method based on WebCodecs availability
             if (useWebCodecs) {
-                await this.processCombinedClipWithWebCodecs(clip, videoInfo, targetVideo, width, height, frameRate);
+                await this.processCombinedClipWithWebCodecs(clip, videoInfo, hiddenVideos, width, height, frameRate);
             } else {
-                await this.processCombinedClipOptimized(clip, videoInfo, targetVideo, width, height, frameRate);
+                await this.processCombinedClipOptimized(clip, videoInfo, hiddenVideos, width, height, frameRate);
             }
+
+            // Clean up hidden video elements
+            hiddenVideos.forEach(hiddenVideo => {
+                document.body.removeChild(hiddenVideo.video);
+            });
 
         } catch (error) {
             console.error('Error processing combined clip:', error);
@@ -1299,7 +1574,7 @@ class TeslaCamPlayer {
         }
     }
 
-    async processCombinedClipOptimized(clip, videoInfo, targetVideo, width, height, frameRate) {
+    async processCombinedClipOptimized(clip, videoInfo, hiddenVideos, width, height, frameRate) {
         // Create canvas for video processing
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -1351,20 +1626,22 @@ class TeslaCamPlayer {
         mediaRecorder.start();
 
         // Process each clip segment in sequence with optimized frame processing
-        for (let i = 0; i < clip.clips.length; i++) {
-            const clipSegment = clip.clips[i];
+        for (let i = 0; i < hiddenVideos.length; i++) {
+            const hiddenVideoData = hiddenVideos[i];
+            const hiddenVideo = hiddenVideoData.video;
+            const clipSegment = hiddenVideoData.clipSegment;
             const startTime = clipSegment.spliceStart || 0;
             const endTime = clipSegment.spliceEnd || clipSegment.duration;
             
-            console.log(`Processing clip segment ${i + 1}/${clip.clips.length}: ${startTime}s to ${endTime}s`);
+            console.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video`);
             
             // Seek to start time
-            targetVideo.currentTime = startTime;
+            hiddenVideo.currentTime = startTime;
             
             // Wait for video to be ready
             await new Promise((resolve) => {
-                targetVideo.addEventListener('canplay', resolve, { once: true });
-                targetVideo.play();
+                hiddenVideo.addEventListener('canplay', resolve, { once: true });
+                hiddenVideo.play();
             });
 
             // Process video frames with optimized timing
@@ -1373,14 +1650,15 @@ class TeslaCamPlayer {
                 let lastFrameTime = 0;
                 
                 const processFrame = (currentTime) => {
-                    if (targetVideo.currentTime >= endTime || targetVideo.ended || targetVideo.paused) {
+                    if (hiddenVideo.currentTime >= endTime || hiddenVideo.ended || hiddenVideo.paused) {
+                        console.log(`Hidden video ${i} finished: currentTime=${hiddenVideo.currentTime}s, endTime=${endTime}s`);
                         resolve();
                         return;
                     }
                     
                     // Only draw frame at specified frame rate
                     if (currentTime - lastFrameTime >= frameInterval) {
-                        ctx.drawImage(targetVideo, 0, 0, width, height);
+                        ctx.drawImage(hiddenVideo, 0, 0, width, height);
                         lastFrameTime = currentTime;
                     }
                     
@@ -1398,7 +1676,7 @@ class TeslaCamPlayer {
         mediaRecorder.stop();
     }
 
-    async processCombinedClipWithWebCodecs(clip, videoInfo, targetVideo, width, height, frameRate) {
+    async processCombinedClipWithWebCodecs(clip, videoInfo, hiddenVideos, width, height, frameRate) {
         console.log('Using WebCodecs API for fast combined clip processing...');
         
         try {
@@ -1453,20 +1731,22 @@ class TeslaCamPlayer {
             mediaRecorder.start();
 
             // Process each clip segment with WebCodecs-optimized approach
-            for (let i = 0; i < clip.clips.length; i++) {
-                const clipSegment = clip.clips[i];
+            for (let i = 0; i < hiddenVideos.length; i++) {
+                const hiddenVideoData = hiddenVideos[i];
+                const hiddenVideo = hiddenVideoData.video;
+                const clipSegment = hiddenVideoData.clipSegment;
                 const startTime = clipSegment.spliceStart || 0;
                 const endTime = clipSegment.spliceEnd || clipSegment.duration;
                 
-                console.log(`Processing clip segment ${i + 1}/${clip.clips.length}: ${startTime}s to ${endTime}s (WebCodecs)`);
+                console.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video (WebCodecs)`);
                 
                 // Seek to start time
-                targetVideo.currentTime = startTime;
+                hiddenVideo.currentTime = startTime;
                 
                 // Wait for video to be ready
                 await new Promise((resolve) => {
-                    targetVideo.addEventListener('canplay', resolve, { once: true });
-                    targetVideo.play();
+                    hiddenVideo.addEventListener('canplay', resolve, { once: true });
+                    hiddenVideo.play();
                 });
 
                 // Process video frames with WebCodecs-optimized timing
@@ -1475,14 +1755,15 @@ class TeslaCamPlayer {
                     let lastFrameTime = 0;
                     
                     const processFrame = (currentTime) => {
-                        if (targetVideo.currentTime >= endTime || targetVideo.ended || targetVideo.paused) {
+                        if (hiddenVideo.currentTime >= endTime || hiddenVideo.ended || hiddenVideo.paused) {
+                            console.log(`Hidden video ${i} finished: currentTime=${hiddenVideo.currentTime}s, endTime=${endTime}s (WebCodecs)`);
                             resolve();
                             return;
                         }
                         
                         // Optimized frame processing for WebCodecs
                         if (currentTime - lastFrameTime >= frameInterval) {
-                            ctx.drawImage(targetVideo, 0, 0, width, height);
+                            ctx.drawImage(hiddenVideo, 0, 0, width, height);
                             lastFrameTime = currentTime;
                         }
                         
@@ -2001,6 +2282,13 @@ class TeslaCamPlayer {
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.teslaCamPlayer = new TeslaCamPlayer();
+    
+    // Check for service worker updates
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(registration => {
+            registration.update();
+        });
+    }
 });
 
 // Cleanup on page unload

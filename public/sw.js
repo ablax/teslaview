@@ -1,6 +1,6 @@
-const CACHE_NAME = 'tesla-cam-player-v1.0.1';
-const STATIC_CACHE = 'tesla-cam-static-v1.0.1';
-const DYNAMIC_CACHE = 'tesla-cam-dynamic-v1.0.1';
+const CACHE_NAME = 'tesla-cam-player-v1.0.2';
+const STATIC_CACHE = 'tesla-cam-static-v1.0.2';
+const DYNAMIC_CACHE = 'tesla-cam-dynamic-v1.0.2';
 
 // Files to cache immediately
 const STATIC_FILES = [
