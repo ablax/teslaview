@@ -1,7 +1,7 @@
 class TeslaCamPlayer {
     constructor() {
         // Production mode flag - set to true to disable console logs
-        this.isProduction = true; // Set to true for production
+        this.isProduction = false; // Set to true for production
         
         this.videos = [];
         this.events = [];
@@ -1351,8 +1351,11 @@ class TeslaCamPlayer {
             let lastFrameTime = 0;
             
             const processFrame = (currentTime) => {
+                // Check if we've reached or exceeded the end time
                 if (hiddenVideo.currentTime >= clip.endTime || hiddenVideo.ended || hiddenVideo.paused) {
                     this.log(`Hidden video finished: currentTime=${hiddenVideo.currentTime}s, endTime=${clip.endTime}s`);
+                    // Stop the video immediately to prevent further playback
+                    hiddenVideo.pause();
                     resolve();
                     return;
                 }
@@ -1447,7 +1450,10 @@ class TeslaCamPlayer {
                 let lastFrameTime = 0;
                 
                 const processFrame = (currentTime) => {
+                    // Check if we've reached or exceeded the end time
                     if (hiddenVideo.currentTime >= clip.endTime || hiddenVideo.ended || hiddenVideo.paused) {
+                        // Stop the video immediately to prevent further playback
+                        hiddenVideo.pause();
                         resolve();
                         return;
                     }
@@ -1683,8 +1689,11 @@ class TeslaCamPlayer {
                 let lastFrameTime = 0;
                 
                 const processFrame = (currentTime) => {
+                    // Check if we've reached or exceeded the end time
                     if (hiddenVideo.currentTime >= endTime || hiddenVideo.ended || hiddenVideo.paused) {
                         this.log(`Hidden video ${i} finished: currentTime=${hiddenVideo.currentTime}s, endTime=${endTime}s`);
+                        // Stop the video immediately to prevent further playback
+                        hiddenVideo.pause();
                         resolve();
                         return;
                     }
@@ -1810,8 +1819,11 @@ class TeslaCamPlayer {
                     let lastFrameTime = 0;
                     
                     const processFrame = (currentTime) => {
+                        // Check if we've reached or exceeded the end time
                         if (hiddenVideo.currentTime >= endTime || hiddenVideo.ended || hiddenVideo.paused) {
                             this.log(`Hidden video ${i} finished: currentTime=${hiddenVideo.currentTime}s, endTime=${endTime}s (WebCodecs)`);
+                            // Stop the video immediately to prevent further playback
+                            hiddenVideo.pause();
                             resolve();
                             return;
                         }
@@ -2336,14 +2348,14 @@ class TeslaCamPlayer {
     // Helper method for conditional logging
     log(...args) {
         if (!this.isProduction) {
-            this.log(...args);
+            console.log(...args);
         }
     }
     
     // Helper method for conditional error logging
     logError(...args) {
         if (!this.isProduction) {
-            this.logError(...args);
+            console.logError(...args);
         }
     }
 }

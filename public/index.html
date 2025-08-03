@@ -8,7 +8,7 @@
     <!-- PWA Meta Tags -->
     <meta name="description" content="View, edit, and create custom clips from TeslaCam videos from Dashcam or Sentry Mode">
     <meta name="theme-color" content="#667eea">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TeslaCam">
     <meta name="msapplication-TileColor" content="#667eea">
@@ -354,15 +354,19 @@
         const dismissBtn = document.getElementById('dismissBtn');
 
         window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
+            // Store the event for later use (custom prompt)
             deferredPrompt = e;
             
-            // Show install prompt after a delay
+            // Don't prevent default - let the native banner show
+            // The native banner will show automatically if the user hasn't dismissed it
+            
+            // Show custom install prompt as fallback after a longer delay
             setTimeout(() => {
                 if (deferredPrompt && !localStorage.getItem('installPromptDismissed')) {
+                    // Only show custom prompt if native banner hasn't been shown
                     installPrompt.classList.add('show');
                 }
-            }, 3000);
+            }, 10000); // Longer delay to let native banner show first
         });
 
         // Check installability on load
