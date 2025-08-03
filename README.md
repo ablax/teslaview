@@ -40,11 +40,20 @@ The application is deployed and ready to use! Simply visit the link above to sta
 
 ### Event Combination System
 - **Multi-event selection** - Select multiple events to combine into longer videos
-- **Intuitive dropdown interface** - Checkbox dropdown for easy event selection
+- **Intuitive checkbox dropdown** - Modern dropdown interface for easy event selection
 - **Bulk operations** - Select all/none events with single clicks
 - **Camera-specific downloads** - Download combined events for specific cameras
 - **Seamless transitions** - No delays between event segments in combined videos
 - **Smart event grouping** - Automatically detects and groups related events
+- **Persistent selection** - Dropdown stays open during selection for better UX
+
+### Progress Tracking System
+- **Real-time progress bar** - Visual feedback during video processing operations
+- **Blocking overlay** - Prevents user interaction during video generation
+- **Detailed status updates** - Shows current operation and percentage completion
+- **Multi-stage progress** - Tracks loading, processing, and combining phases
+- **Operation-specific feedback** - Different progress for splicing, combining clips, and combining events
+- **Error handling** - Progress bar hides automatically on completion or error
 
 ### Performance Optimizations
 - **WebCodecs API support** - Hardware-accelerated video processing when available
@@ -52,6 +61,7 @@ The application is deployed and ready to use! Simply visit the link above to sta
 - **Production mode** - Toggle console logging for development/production
 - **Optimized video processing** - Faster video combining and splicing
 - **Memory management** - Automatic cleanup of video elements and object URLs
+- **Hidden video processing** - Uses dedicated video elements for accurate timing
 
 ## Prerequisites
 
@@ -161,15 +171,35 @@ this.isProduction = true;  // Production mode - hides console logs
    - **Dropdown interface** - Click "Select Events" to open the dropdown
    - **Checkbox selection** - Check individual events or use "Select All"/"Select None"
    - **Event information** - See video count, camera count, and timestamps
+   - **Persistent dropdown** - Dropdown stays open during selection
 4. **Combine events** - Click "Combine Events" to create a combined event
 5. **Download combined video** - Use camera-specific download buttons
 
 #### Event Selection Interface
-- **Intuitive dropdown** - Compact interface for selecting from many events
-- **Bulk operations** - Select all events or clear all selections
+- **Intuitive checkbox dropdown** - Modern interface for selecting from many events
+- **Bulk operations** - Select all events or clear all selections with single clicks
 - **Real-time feedback** - See selection count in dropdown button
 - **Event details** - View video count, camera count, and timestamps
-- **Persistent selection** - Dropdown stays open during selection
+- **Persistent selection** - Dropdown stays open during selection for better UX
+- **No duration display** - Simplified interface without problematic duration calculations
+
+### Progress Tracking
+
+#### During Video Processing
+- **Progress overlay** - Full-screen overlay with progress bar during video operations
+- **Real-time updates** - Shows current operation and percentage completion
+- **Multi-stage tracking**:
+  - **Loading phase** - "Loading video 1/3..." for video loading
+  - **Processing phase** - "Processing video 1/3 (45%)..." for frame processing
+  - **Combining phase** - "Processing segment 1/3..." for clip combining
+- **Operation blocking** - Prevents user interaction during processing
+- **Automatic completion** - Progress bar hides when operation completes
+
+#### Progress for Different Operations
+- **Splicing clips** - Shows loading and processing progress
+- **Combining clips** - Shows segment loading and processing progress
+- **Combining events** - Shows video loading and processing progress
+- **Error handling** - Progress bar hides automatically on errors
 
 ### Camera Views
 
@@ -249,6 +279,7 @@ Videos are automatically grouped into events based on:
 - **Visual feedback** - Clear indication of selected times
 - **Error handling** - Validates start/end times and selection
 - **Hidden video processing** - Uses dedicated video elements for accurate splicing
+- **Progress tracking** - Real-time progress during splicing operations
 
 ### Combining System
 - **Multi-clip selection** - Choose any number of clips to combine
@@ -257,6 +288,7 @@ Videos are automatically grouped into events based on:
 - **Sequential processing** - Plays each clip segment in order
 - **Single output** - Creates one continuous video file
 - **Seamless transitions** - No delays between segments
+- **Progress tracking** - Detailed progress for loading and processing phases
 
 ### Download System
 - **MP4 format** - High-quality video output
@@ -264,6 +296,7 @@ Videos are automatically grouped into events based on:
 - **Individual cameras** - Download specific camera feeds
 - **Combined videos** - Download merged clips as single files
 - **WebCodecs optimization** - Hardware-accelerated processing when available
+- **Progress feedback** - Visual progress during download operations
 
 ## Performance Features
 
@@ -279,6 +312,13 @@ Videos are automatically grouped into events based on:
 - **Production mode** - Clean console output for end users
 - **Easy toggle** - Single line change to switch modes
 - **Performance optimization** - No logging overhead in production
+
+### Progress System
+- **Real-time feedback** - Users know exactly what's happening during operations
+- **Operation blocking** - Prevents user confusion during processing
+- **Multi-stage tracking** - Different progress for different phases
+- **Error recovery** - Progress bar automatically hides on errors
+- **Performance monitoring** - Tracks loading, processing, and combining times
 
 ## Troubleshooting
 
@@ -321,6 +361,12 @@ Videos are automatically grouped into events based on:
 - Try refreshing the page if event selection doesn't work
 - Use the dropdown interface for easier event selection
 
+### Progress bar issues
+- **Progress bar not showing**: Check if operation is actually running
+- **Progress stuck**: Try refreshing the page and retry the operation
+- **Progress bar not hiding**: Use browser console to run `forceHideProgress()`
+- **Black overlay**: Progress overlay should hide automatically on completion
+
 ### Offline Mode Issues
 - **App not working offline**: Ensure you've visited the site at least once while online
 - **App resources not loading**: Check browser storage permissions
@@ -353,6 +399,7 @@ This project is licensed under the ISC License.
 - HTML5 Canvas and MediaRecorder API for video processing
 - Progressive Web App (PWA) technology for offline functionality
 - WebCodecs API for hardware-accelerated video processing
+- Real-time progress tracking for better user experience
 
 ## Support
 
@@ -364,6 +411,7 @@ For issues or questions:
 5. Test video editing features with shorter clips first
 6. For PWA issues, check browser console for installability requirements
 7. For performance issues, check WebCodecs support in your browser
+8. For progress bar issues, check if operations are actually running
 
 ### Offline Usage
 - **First visit**: Always visit the site once while online to cache app resources
@@ -377,12 +425,13 @@ For issues or questions:
 - **Browser choice**: Use Safari or Firefox for best H.265 support
 - **Memory management**: Close other tabs when processing large videos
 - **Production mode**: Enable production mode for optimal performance
+- **Progress monitoring**: Watch progress bar for operation status
 
 ## Live Demo
 
 **Try the application online:** [https://teslaview.vercel.app/](https://teslaview.vercel.app/)
 
-The live demo is fully functional and supports all features including video splicing, combining, event combination, and downloading.
+The live demo is fully functional and supports all features including video splicing, combining, event combination, downloading, and real-time progress tracking.
 
 ---
 
