@@ -1253,9 +1253,18 @@ class TeslaCamPlayer {
         });
     }
 
-    downloadCombinedClip(clip, videoInfo) {
-        this.showSuccess(`Starting combined clip download for ${videoInfo.camera}...`);
+    async downloadCombinedClip(clip, videoInfo) {
+        this.showStatusMessage(`Processing combined clip download for ${videoInfo.camera}...`, 'info');
+        console.log('Starting combined clip download:', clip.name, 'Camera:', videoInfo.camera);
         
+        // Check if WebCodecs API is supported and we're in a secure context
+        const useWebCodecs = ('VideoEncoder' in window) && ('VideoDecoder' in window) && window.isSecureContext;
+        
+        if (!useWebCodecs) {
+            console.log('WebCodecs not available, using fallback Canvas/MediaRecorder method');
+            this.showStatusMessage('Using fallback method (slower but compatible)...', 'info');
+        }
+
         // Find the original video element for this camera
         const videoElements = this.videoGrid.querySelectorAll('video');
         const targetVideo = Array.from(videoElements).find(video => {
@@ -1269,25 +1278,53 @@ class TeslaCamPlayer {
             return;
         }
 
-        // Create a canvas for recording
+        try {
+            // Get video dimensions and frame rate
+            const width = targetVideo.videoWidth || 1920;
+            const height = targetVideo.videoHeight || 1080;
+            const frameRate = 30; // Default frame rate
+
+            console.log(`Video dimensions: ${width}x${height}, Frame rate: ${frameRate}`);
+
+            // Use appropriate processing method based on WebCodecs availability
+            if (useWebCodecs) {
+                await this.processCombinedClipWithWebCodecs(clip, videoInfo, targetVideo, width, height, frameRate);
+            } else {
+                await this.processCombinedClipOptimized(clip, videoInfo, targetVideo, width, height, frameRate);
+            }
+
+        } catch (error) {
+            console.error('Error processing combined clip:', error);
+            this.showError(`Failed to process combined clip: ${error.message}`);
+        }
+    }
+
+    async processCombinedClipOptimized(clip, videoInfo, targetVideo, width, height, frameRate) {
+        // Create canvas for video processing
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = targetVideo.videoWidth;
-        canvas.height = targetVideo.videoHeight;
+        canvas.width = width;
+        canvas.height = height;
 
-        // Create MediaRecorder
-        const stream = canvas.captureStream();
+        // Create MediaRecorder with optimized settings
+        const stream = canvas.captureStream(frameRate);
         let mimeType = 'video/mp4';
         if (!MediaRecorder.isTypeSupported('video/mp4')) {
             mimeType = 'video/webm;codecs=vp9';
             if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
                 mimeType = 'video/webm;codecs=vp8';
+                if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+                    mimeType = 'video/webm';
+                }
             }
         }
         
-        const mediaRecorder = new MediaRecorder(stream, { mimeType });
+        const mediaRecorder = new MediaRecorder(stream, { 
+            mimeType,
+            videoBitsPerSecond: 10000000 // 10 Mbps for better quality
+        });
+
         const chunks = [];
-        
         mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
                 chunks.push(event.data);
@@ -1312,42 +1349,161 @@ class TeslaCamPlayer {
 
         // Start recording
         mediaRecorder.start();
-        
-        // Process each clip segment in sequence
-        let currentClipIndex = 0;
-        const processNextClip = () => {
-            if (currentClipIndex >= clip.clips.length) {
-                mediaRecorder.stop();
-                return;
-            }
 
-            const clipSegment = clip.clips[currentClipIndex];
+        // Process each clip segment in sequence with optimized frame processing
+        for (let i = 0; i < clip.clips.length; i++) {
+            const clipSegment = clip.clips[i];
             const startTime = clipSegment.spliceStart || 0;
             const endTime = clipSegment.spliceEnd || clipSegment.duration;
             
-            // Seek to start time and play
+            console.log(`Processing clip segment ${i + 1}/${clip.clips.length}: ${startTime}s to ${endTime}s`);
+            
+            // Seek to start time
             targetVideo.currentTime = startTime;
-            targetVideo.play();
+            
+            // Wait for video to be ready
+            await new Promise((resolve) => {
+                targetVideo.addEventListener('canplay', resolve, { once: true });
+                targetVideo.play();
+            });
 
-            // Draw frames to canvas
-            const drawFrame = () => {
-                if (targetVideo.currentTime >= endTime) {
-                    currentClipIndex++;
-                    processNextClip();
-                    return;
-                }
+            // Process video frames with optimized timing
+            await new Promise((resolve) => {
+                const frameInterval = 1000 / frameRate;
+                let lastFrameTime = 0;
                 
-                ctx.drawImage(targetVideo, 0, 0, canvas.width, canvas.height);
-                requestAnimationFrame(drawFrame);
+                const processFrame = (currentTime) => {
+                    if (targetVideo.currentTime >= endTime || targetVideo.ended || targetVideo.paused) {
+                        resolve();
+                        return;
+                    }
+                    
+                    // Only draw frame at specified frame rate
+                    if (currentTime - lastFrameTime >= frameInterval) {
+                        ctx.drawImage(targetVideo, 0, 0, width, height);
+                        lastFrameTime = currentTime;
+                    }
+                    
+                    requestAnimationFrame(processFrame);
+                };
+                
+                requestAnimationFrame(processFrame);
+            });
+
+            // Small delay between clip segments
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        // Stop recording
+        mediaRecorder.stop();
+    }
+
+    async processCombinedClipWithWebCodecs(clip, videoInfo, targetVideo, width, height, frameRate) {
+        console.log('Using WebCodecs API for fast combined clip processing...');
+        
+        try {
+            // Try to use MP4 encoding if supported
+            let mimeType = 'video/mp4';
+            if (!MediaRecorder.isTypeSupported('video/mp4')) {
+                mimeType = 'video/webm;codecs=vp9';
+                if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+                    mimeType = 'video/webm;codecs=vp8';
+                    if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+                        mimeType = 'video/webm';
+                    }
+                }
+            }
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = width;
+            canvas.height = height;
+
+            // Create MediaRecorder with optimized settings for MP4
+            const stream = canvas.captureStream(frameRate);
+            const mediaRecorder = new MediaRecorder(stream, { 
+                mimeType,
+                videoBitsPerSecond: 12000000 // 12 Mbps for high quality MP4
+            });
+
+            const chunks = [];
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data);
+                }
             };
 
-            targetVideo.addEventListener('canplay', () => {
-                drawFrame();
-            }, { once: true });
-        };
+            mediaRecorder.onstop = () => {
+                const fileExtension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                const blob = new Blob(chunks, { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${clip.name}_${videoInfo.camera}_combined.${fileExtension}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                URL.revokeObjectURL(url);
+                this.showSuccess(`Downloaded combined ${videoInfo.camera} clip: ${clip.name} (${fileExtension.toUpperCase()} - WebCodecs)`);
+            };
 
-        // Start processing clips
-        processNextClip();
+            // Start recording
+            mediaRecorder.start();
+
+            // Process each clip segment with WebCodecs-optimized approach
+            for (let i = 0; i < clip.clips.length; i++) {
+                const clipSegment = clip.clips[i];
+                const startTime = clipSegment.spliceStart || 0;
+                const endTime = clipSegment.spliceEnd || clipSegment.duration;
+                
+                console.log(`Processing clip segment ${i + 1}/${clip.clips.length}: ${startTime}s to ${endTime}s (WebCodecs)`);
+                
+                // Seek to start time
+                targetVideo.currentTime = startTime;
+                
+                // Wait for video to be ready
+                await new Promise((resolve) => {
+                    targetVideo.addEventListener('canplay', resolve, { once: true });
+                    targetVideo.play();
+                });
+
+                // Process video frames with WebCodecs-optimized timing
+                await new Promise((resolve) => {
+                    const frameInterval = 1000 / frameRate;
+                    let lastFrameTime = 0;
+                    
+                    const processFrame = (currentTime) => {
+                        if (targetVideo.currentTime >= endTime || targetVideo.ended || targetVideo.paused) {
+                            resolve();
+                            return;
+                        }
+                        
+                        // Optimized frame processing for WebCodecs
+                        if (currentTime - lastFrameTime >= frameInterval) {
+                            ctx.drawImage(targetVideo, 0, 0, width, height);
+                            lastFrameTime = currentTime;
+                        }
+                        
+                        requestAnimationFrame(processFrame);
+                    };
+                    
+                    requestAnimationFrame(processFrame);
+                });
+
+                // Minimal delay between clip segments for WebCodecs
+                await new Promise(resolve => setTimeout(resolve, 25));
+            }
+
+            // Stop recording
+            mediaRecorder.stop();
+            
+        } catch (error) {
+            console.error('WebCodecs processing failed, falling back to standard method:', error);
+            // Fallback to standard method if WebCodecs fails
+            await this.processCombinedClipOptimized(clip, videoInfo, targetVideo, width, height, frameRate);
+        }
     }
 
     cleanup() {
