@@ -79,6 +79,19 @@ class TeslaCamPlayer {
         this.selectedEventsList = document.getElementById('selectedEventsList');
         this.combinedEventsContainer = document.getElementById('combinedEventsContainer');
         this.combinedEventsList = document.getElementById('combinedEventsList');
+        
+        // Progress overlay elements
+        this.progressOverlay = document.getElementById('progressOverlay');
+        this.progressTitle = document.getElementById('progressTitle');
+        this.progressStatus = document.getElementById('progressStatus');
+        this.progressFill = document.getElementById('progressFill');
+        this.progressText = document.getElementById('progressText');
+        
+        // Ensure progress overlay starts hidden
+        if (this.progressOverlay) {
+            this.progressOverlay.style.display = 'none';
+            this.log('Progress overlay initialized and hidden');
+        }
     }
 
     bindEvents() {
@@ -124,6 +137,114 @@ class TeslaCamPlayer {
         this.spliceBtn.addEventListener('click', () => this.createSplice());
         this.selectClipsBtn.addEventListener('click', () => this.toggleSelectMode());
         this.combineBtn.addEventListener('click', () => this.combineSelectedClips());
+        
+        // Test progress overlay (remove in production)
+        if (!this.isProduction) {
+            window.testProgress = () => {
+                console.log('testProgress called');
+                this.showProgress('Test Progress', 'Testing progress overlay...');
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += 10;
+                    console.log('Updating progress:', progress);
+                    this.updateProgress(progress, `Testing... ${progress}%`);
+                    if (progress >= 100) {
+                        clearInterval(interval);
+                        setTimeout(() => this.hideProgress(), 1000);
+                    }
+                }, 500);
+            };
+            
+            // Force hide progress overlay
+            window.forceHideProgress = () => {
+                console.log('Force hiding progress overlay');
+                const overlay = document.getElementById('progressOverlay');
+                if (overlay) {
+                    overlay.style.cssText = 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;';
+                }
+            };
+            
+            // Simple test with inline styles
+            window.testProgressSimple = () => {
+                console.log('testProgressSimple called');
+                const overlay = document.getElementById('progressOverlay');
+                overlay.style.cssText = `
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    background: rgba(0, 0, 0, 0.9) !important;
+                    display: flex !important;
+                    justify-content: center !important;
+                    align-items: center !important;
+                    z-index: 9999 !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                `;
+                
+                const title = document.getElementById('progressTitle');
+                const status = document.getElementById('progressStatus');
+                const fill = document.getElementById('progressFill');
+                const text = document.getElementById('progressText');
+                
+                title.textContent = 'Simple Test';
+                status.textContent = 'Testing with inline styles...';
+                fill.style.width = '50%';
+                text.textContent = '50%';
+                
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 3000);
+            };
+            
+            // Create overlay from scratch
+            window.testProgressFromScratch = () => {
+                console.log('testProgressFromScratch called');
+                
+                // Remove existing overlay
+                const existingOverlay = document.getElementById('progressOverlay');
+                if (existingOverlay) {
+                    existingOverlay.remove();
+                }
+                
+                // Create new overlay from scratch
+                const overlay = document.createElement('div');
+                overlay.id = 'testOverlay';
+                overlay.style.cssText = `
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    background: rgba(255, 0, 0, 0.8) !important;
+                    display: flex !important;
+                    justify-content: center !important;
+                    align-items: center !important;
+                    z-index: 99999 !important;
+                    color: white !important;
+                    font-size: 24px !important;
+                    font-weight: bold !important;
+                `;
+                
+                overlay.innerHTML = `
+                    <div style="background: white; color: black; padding: 40px; border-radius: 10px; text-align: center;">
+                        <h2>TEST OVERLAY</h2>
+                        <p>This is a test overlay created from scratch</p>
+                        <div style="background: #ddd; width: 300px; height: 20px; border-radius: 10px; margin: 20px 0;">
+                            <div style="background: #667eea; width: 50%; height: 100%; border-radius: 10px;"></div>
+                        </div>
+                        <p>Progress: 50%</p>
+                    </div>
+                `;
+                
+                document.body.appendChild(overlay);
+                
+                setTimeout(() => {
+                    overlay.remove();
+                }, 3000);
+            };
+        }
     }
 
     handleFileSelection(event) {
@@ -1190,7 +1311,7 @@ class TeslaCamPlayer {
     }
 
     async downloadSplicedClip(clip, videoInfo) {
-        this.showStatusMessage(`Processing spliced clip download for ${videoInfo.camera}...`, 'info');
+        this.showProgress(`Splicing Clip - ${videoInfo.camera}`, 'Initializing video processing...');
         this.log('Starting spliced clip download:', clip.name, 'Camera:', videoInfo.camera);
         
         // Check if WebCodecs API is supported and we're in a secure context
@@ -1275,9 +1396,16 @@ class TeslaCamPlayer {
             // Clean up the hidden video element
             document.body.removeChild(hiddenVideo);
 
+            // Complete progress
+            this.updateProgress(100, 'Download completed!');
+            setTimeout(() => {
+                this.hideProgress();
+            }, 1000);
+
         } catch (error) {
             this.logError('Error processing spliced clip:', error);
             this.showError(`Failed to process spliced clip: ${error.message}`);
+            this.hideProgress();
         }
     }
 
@@ -1481,7 +1609,7 @@ class TeslaCamPlayer {
     }
 
     async downloadCombinedClip(clip, videoInfo) {
-        this.showStatusMessage(`Processing combined clip download for ${videoInfo.camera}...`, 'info');
+        this.showProgress(`Combining Clips - ${videoInfo.camera}`, 'Initializing video processing...');
         this.log('Starting combined clip download:', clip.name, 'Camera:', videoInfo.camera);
         
         // Check if WebCodecs API is supported and we're in a secure context
@@ -1498,6 +1626,13 @@ class TeslaCamPlayer {
             
             for (let i = 0; i < clip.clips.length; i++) {
                 const clipSegment = clip.clips[i];
+                
+                // Update progress for each clip segment
+                const segmentProgress = (i / clip.clips.length) * 100;
+                this.updateProgress(segmentProgress, `Loading clip segment ${i + 1}/${clip.clips.length}...`);
+                
+                // Add a small delay to make progress visible
+                await new Promise(resolve => setTimeout(resolve, 100));
                 
                 // Find the video for this camera in the original event
                 const originalEvent = this.events[clipSegment.originalEvent];
@@ -1585,9 +1720,16 @@ class TeslaCamPlayer {
                 document.body.removeChild(hiddenVideo.video);
             });
 
+            // Complete progress
+            this.updateProgress(100, 'Download completed!');
+            setTimeout(() => {
+                this.hideProgress();
+            }, 1000);
+
         } catch (error) {
             this.logError('Error processing combined clip:', error);
             this.showError(`Failed to process combined clip: ${error.message}`);
+            this.hideProgress();
         }
     }
 
@@ -1651,17 +1793,49 @@ class TeslaCamPlayer {
                 const startTime = clipVideoInfo.spliceStart || 0;
                 const endTime = clipVideoInfo.spliceEnd || clipVideoInfo.duration;
                 
+                // Update progress for processing
+                const processingProgress = (i / hiddenVideos.length) * 100;
+                this.updateProgress(processingProgress, `Processing segment ${i + 1}/${hiddenVideos.length}...`);
+                
+                // Add a small delay to make progress visible
+                await new Promise(resolve => setTimeout(resolve, 50));
+                
                 this.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video`);
                 this.log(`Seeking hidden video ${i} to ${startTime}s`);
                 
                 // Ensure video is ready before seeking
                 if (hiddenVideo.readyState < 2) {
+                    this.updateProgress(processingProgress + 5, `Loading video ${i + 1}/${hiddenVideos.length}...`);
                     await new Promise((resolve) => {
                         hiddenVideo.addEventListener('loadeddata', resolve, { once: true });
                     });
                 }
                 
                 // Seek to start time and wait for seek to complete
+                this.updateProgress(processingProgress + 10, `Seeking to ${startTime}s...`);
+                hiddenVideo.currentTime = startTime;
+                await new Promise((resolve) => {
+                    const seekHandler = () => {
+                        this.log(`Hidden video ${i} seeked to: ${hiddenVideo.currentTime}s`);
+                        resolve();
+                    };
+                    
+                    // Use seeking event if available, otherwise use a timeout
+                    if ('seeking' in hiddenVideo) {
+                        hiddenVideo.addEventListener('seeked', seekHandler, { once: true });
+                    } else {
+                        setTimeout(seekHandler, 100);
+                    }
+                });
+                
+                // Wait for video to be ready to play
+                this.updateProgress(processingProgress + 15, `Preparing video ${i + 1}/${hiddenVideos.length}...`);
+                await new Promise((resolve) => {
+                    hiddenVideo.addEventListener('canplay', resolve, { once: true });
+                    hiddenVideo.play();
+                });
+                
+
                 hiddenVideo.currentTime = startTime;
                 await new Promise((resolve) => {
                     const seekHandler = () => {
@@ -1687,6 +1861,7 @@ class TeslaCamPlayer {
             await new Promise((resolve) => {
                 const frameInterval = 1000 / frameRate;
                 let lastFrameTime = 0;
+                const totalDuration = endTime - startTime;
                 
                 const processFrame = (currentTime) => {
                     // Check if we've reached or exceeded the end time
@@ -1702,6 +1877,12 @@ class TeslaCamPlayer {
                     if (currentTime - lastFrameTime >= frameInterval) {
                         ctx.drawImage(hiddenVideo, 0, 0, width, height);
                         lastFrameTime = currentTime;
+                        
+                        // Update progress based on video playback
+                        const currentProgress = (hiddenVideo.currentTime - startTime) / totalDuration;
+                        const segmentProgress = (i / hiddenVideos.length) * 100;
+                        const frameProgress = segmentProgress + (currentProgress * (100 / hiddenVideos.length));
+                        this.updateProgress(frameProgress, `Processing segment ${i + 1}/${hiddenVideos.length} (${Math.round(currentProgress * 100)}%)...`);
                     }
                     
                     requestAnimationFrame(processFrame);
@@ -1781,17 +1962,26 @@ class TeslaCamPlayer {
                 const startTime = clipVideoInfo.spliceStart || 0;
                 const endTime = clipVideoInfo.spliceEnd || clipVideoInfo.duration;
                 
+                // Update progress for processing
+                const processingProgress = (i / hiddenVideos.length) * 100;
+                this.updateProgress(processingProgress, `Processing segment ${i + 1}/${hiddenVideos.length}...`);
+                
+                // Add a small delay to make progress visible
+                await new Promise(resolve => setTimeout(resolve, 50));
+                
                 this.log(`Processing clip segment ${i + 1}/${hiddenVideos.length}: ${startTime}s to ${endTime}s using hidden video (WebCodecs)`);
                 this.log(`Seeking hidden video ${i} to ${startTime}s (WebCodecs)`);
                 
                 // Ensure video is ready before seeking
                 if (hiddenVideo.readyState < 2) {
+                    this.updateProgress(processingProgress + 5, `Loading video ${i + 1}/${hiddenVideos.length}...`);
                     await new Promise((resolve) => {
                         hiddenVideo.addEventListener('loadeddata', resolve, { once: true });
                     });
                 }
                 
                 // Seek to start time and wait for seek to complete
+                this.updateProgress(processingProgress + 10, `Seeking to ${startTime}s...`);
                 hiddenVideo.currentTime = startTime;
                 await new Promise((resolve) => {
                     const seekHandler = () => {
@@ -1808,6 +1998,7 @@ class TeslaCamPlayer {
                 });
                 
                 // Wait for video to be ready to play
+                this.updateProgress(processingProgress + 15, `Preparing video ${i + 1}/${hiddenVideos.length}...`);
                 await new Promise((resolve) => {
                     hiddenVideo.addEventListener('canplay', resolve, { once: true });
                     hiddenVideo.play();
@@ -1817,6 +2008,7 @@ class TeslaCamPlayer {
                 await new Promise((resolve) => {
                     const frameInterval = 1000 / frameRate;
                     let lastFrameTime = 0;
+                    const totalDuration = endTime - startTime;
                     
                     const processFrame = (currentTime) => {
                         // Check if we've reached or exceeded the end time
@@ -1832,6 +2024,12 @@ class TeslaCamPlayer {
                         if (currentTime - lastFrameTime >= frameInterval) {
                             ctx.drawImage(hiddenVideo, 0, 0, width, height);
                             lastFrameTime = currentTime;
+                            
+                            // Update progress based on video playback
+                            const currentProgress = (hiddenVideo.currentTime - startTime) / totalDuration;
+                            const segmentProgress = (i / hiddenVideos.length) * 100;
+                            const frameProgress = segmentProgress + (currentProgress * (100 / hiddenVideos.length));
+                            this.updateProgress(frameProgress, `Processing segment ${i + 1}/${hiddenVideos.length} (${Math.round(currentProgress * 100)}%)...`);
                         }
                         
                         requestAnimationFrame(processFrame);
@@ -2086,7 +2284,7 @@ class TeslaCamPlayer {
             return;
         }
 
-        this.showStatusMessage(`Processing combined event download for ${camera}...`, 'info');
+        this.showProgress(`Combining Events - ${camera}`, 'Initializing video processing...');
         this.log('Starting download for combined event:', combinedEvent);
         this.log('Camera:', camera);
 
@@ -2120,6 +2318,10 @@ class TeslaCamPlayer {
             
             for (let i = 0; i < cameraVideos.length; i++) {
                 const cameraVideo = cameraVideos[i];
+                
+                // Update progress for loading videos
+                const loadingProgress = (i / cameraVideos.length) * 50; // First 50% for loading
+                this.updateProgress(loadingProgress, `Loading video ${i + 1}/${cameraVideos.length}...`);
                 
                 // Create a new video element for this specific video
                 const video = document.createElement('video');
@@ -2168,9 +2370,16 @@ class TeslaCamPlayer {
                 await this.processVideosOptimized(videoElements, width, height, frameRate, camera, combinedEvent);
             }
 
+            // Complete progress
+            this.updateProgress(100, 'Download completed!');
+            setTimeout(() => {
+                this.hideProgress();
+            }, 1000);
+
         } catch (error) {
             this.logError('Error processing videos:', error);
             this.showError(`Failed to process videos: ${error.message}`);
+            this.hideProgress();
         }
     }
 
@@ -2230,12 +2439,20 @@ class TeslaCamPlayer {
             const videoElement = videoElements[i];
             const video = videoElement.video;
             
+            // Update progress for processing
+            const processingProgress = 50 + (i / videoElements.length) * 50; // Second 50% for processing
+            this.updateProgress(processingProgress, `Processing video ${i + 1}/${videoElements.length}...`);
+            
+            // Add a small delay to make progress visible
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
             this.log(`Processing video ${i + 1}/${videoElements.length}: ${videoElement.name}`);
             
             // Reset video to beginning
             video.currentTime = 0;
             
             // Wait for video to be ready
+            this.updateProgress(processingProgress + 5, `Preparing video ${i + 1}/${videoElements.length}...`);
             await new Promise((resolve) => {
                 video.addEventListener('canplay', resolve, { once: true });
                 video.play();
@@ -2246,6 +2463,7 @@ class TeslaCamPlayer {
                 const startTime = performance.now();
                 const frameInterval = 1000 / frameRate; // Time between frames
                 let lastFrameTime = 0;
+                const videoDuration = video.duration || 60; // Fallback duration
                 
                 const processFrame = (currentTime) => {
                     if (video.ended || video.paused) {
@@ -2257,6 +2475,12 @@ class TeslaCamPlayer {
                     if (currentTime - lastFrameTime >= frameInterval) {
                         ctx.drawImage(video, 0, 0, width, height);
                         lastFrameTime = currentTime;
+                        
+                        // Update progress based on video playback
+                        const currentProgress = video.currentTime / videoDuration;
+                        const segmentProgress = 50 + (i / videoElements.length) * 50;
+                        const frameProgress = segmentProgress + (currentProgress * (50 / videoElements.length));
+                        this.updateProgress(frameProgress, `Processing video ${i + 1}/${videoElements.length} (${Math.round(currentProgress * 100)}%)...`);
                     }
                     
                     requestAnimationFrame(processFrame);
@@ -2332,12 +2556,20 @@ class TeslaCamPlayer {
                 const videoElement = videoElements[i];
                 const video = videoElement.video;
                 
+                // Update progress for processing
+                const processingProgress = 50 + (i / videoElements.length) * 50; // Second 50% for processing
+                this.updateProgress(processingProgress, `Processing video ${i + 1}/${videoElements.length}...`);
+                
+                // Add a small delay to make progress visible
+                await new Promise(resolve => setTimeout(resolve, 50));
+                
                 this.log(`Processing video ${i + 1}/${videoElements.length}: ${videoElement.name} (WebCodecs)`);
                 
                 // Reset video to beginning
                 video.currentTime = 0;
                 
                 // Wait for video to be ready
+                this.updateProgress(processingProgress + 5, `Preparing video ${i + 1}/${videoElements.length}...`);
                 await new Promise((resolve) => {
                     video.addEventListener('canplay', resolve, { once: true });
                     video.play();
@@ -2347,6 +2579,7 @@ class TeslaCamPlayer {
                 await new Promise((resolve) => {
                     const frameInterval = 1000 / frameRate;
                     let lastFrameTime = 0;
+                    const videoDuration = video.duration || 60; // Fallback duration
                     
                     const processFrame = (currentTime) => {
                         if (video.ended || video.paused) {
@@ -2358,6 +2591,12 @@ class TeslaCamPlayer {
                         if (currentTime - lastFrameTime >= frameInterval) {
                             ctx.drawImage(video, 0, 0, width, height);
                             lastFrameTime = currentTime;
+                            
+                            // Update progress based on video playback
+                            const currentProgress = video.currentTime / videoDuration;
+                            const segmentProgress = 50 + (i / videoElements.length) * 50;
+                            const frameProgress = segmentProgress + (currentProgress * (50 / videoElements.length));
+                            this.updateProgress(frameProgress, `Processing video ${i + 1}/${videoElements.length} (${Math.round(currentProgress * 100)}%)...`);
                         }
                         
                         requestAnimationFrame(processFrame);
@@ -2419,6 +2658,97 @@ class TeslaCamPlayer {
         if (!this.isProduction) {
             console.logError(...args);
         }
+    }
+    
+    // Progress Management Methods
+    showProgress(title, status = 'Initializing...') {
+        console.log('showProgress called:', title, status);
+        console.trace('showProgress stack trace:'); // This will show the call stack
+        
+        // Hide any existing download overlay
+        if (this.downloadOverlay) {
+            this.downloadOverlay.style.display = 'none';
+        }
+        
+        console.log('Progress elements:', {
+            overlay: this.progressOverlay,
+            title: this.progressTitle,
+            status: this.progressStatus,
+            fill: this.progressFill,
+            text: this.progressText
+        });
+        
+        if (!this.progressOverlay || !this.progressTitle || !this.progressStatus || !this.progressFill || !this.progressText) {
+            console.error('Progress elements not found!');
+            return;
+        }
+        
+        this.progressTitle.textContent = title;
+        this.progressStatus.textContent = status;
+        this.progressFill.style.width = '0%';
+        this.progressText.textContent = '0%';
+        
+        this.progressOverlay.style.display = 'flex';
+        console.log('Progress overlay shown');
+        
+        // Debug: Check computed styles
+        const computedStyle = window.getComputedStyle(this.progressOverlay);
+        console.log('Progress overlay computed styles:', {
+            display: computedStyle.display,
+            position: computedStyle.position,
+            zIndex: computedStyle.zIndex,
+            visibility: computedStyle.visibility,
+            opacity: computedStyle.opacity,
+            width: computedStyle.width,
+            height: computedStyle.height
+        });
+        
+        // Force visibility
+        this.progressOverlay.style.visibility = 'visible';
+        this.progressOverlay.style.opacity = '1';
+        this.progressOverlay.style.zIndex = '9999';
+        
+        // Debug: Check if content is visible
+        const panel = this.progressOverlay.querySelector('.progress-panel');
+        const titleElement = this.progressOverlay.querySelector('#progressTitle');
+        const bar = this.progressOverlay.querySelector('#progressBar');
+        const fill = this.progressOverlay.querySelector('#progressFill');
+        
+        console.log('Progress content elements:', {
+            panel: panel,
+            title: titleElement,
+            bar: bar,
+            fill: fill
+        });
+        
+        if (panel) {
+            const panelStyle = window.getComputedStyle(panel);
+            console.log('Panel computed styles:', {
+                display: panelStyle.display,
+                visibility: panelStyle.visibility,
+                opacity: panelStyle.opacity,
+                background: panelStyle.background,
+                width: panelStyle.width,
+                height: panelStyle.height
+            });
+        }
+        
+
+    }
+    
+    updateProgress(percentage, status) {
+        this.progressFill.style.width = `${percentage}%`;
+        this.progressText.textContent = `${Math.round(percentage)}%`;
+        if (status) {
+            this.progressStatus.textContent = status;
+        }
+    }
+    
+    hideProgress() {
+        this.progressOverlay.style.display = 'none';
+        this.progressOverlay.style.visibility = 'hidden';
+        this.progressOverlay.style.opacity = '0';
+        this.progressOverlay.style.pointerEvents = 'none';
     }
 }
 
