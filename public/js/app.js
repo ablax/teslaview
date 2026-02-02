@@ -9,7 +9,12 @@ class TeslaCamPlayer {
         this.isPlaying = false;
         this.currentSpeed = 1;
         this.objectUrls = [];
-        
+
+        // Telemetry (newer TeslaCam videos may contain a timed metadata track)
+        this.telemetryEnabled = true;
+        this.telemetryByEventIndex = new Map(); // eventIndex -> { points: [{t,data}], keys: [] }
+        this.currentTelemetry = null;
+
         // Splicing state
         this.spliceStartTime = null;
         this.spliceEndTime = null;
@@ -46,6 +51,11 @@ class TeslaCamPlayer {
         
         // Video elements
         this.videoGrid = document.getElementById('videoGrid');
+
+        // Telemetry elements
+        this.telemetryPanel = document.getElementById('telemetryPanel');
+        this.telemetryStatus = document.getElementById('telemetryStatus');
+        this.telemetryValues = document.getElementById('telemetryValues');
         this.fileCountSpan = document.getElementById('fileCount');
         this.eventCountSpan = document.getElementById('eventCount');
         this.eventInfoSpan = document.getElementById('eventInfo');
@@ -249,7 +259,9 @@ class TeslaCamPlayer {
 
     handleFileSelection(event) {
         const files = Array.from(event.target.files);
-        this.processFiles(files);
+        const videoFiles = files.filter(f => f.type.startsWith('video/'));
+        const telemetryFiles = files.filter(f => f.name.toLowerCase().endsWith('.json') || f.name.toLowerCase().endsWith('.csv'));
+        this.processFiles(videoFiles, telemetryFiles);
     }
 
     handleDirectorySelection(event) {
@@ -266,7 +278,7 @@ class TeslaCamPlayer {
             });
         });
         
-        // Filter for video files and organize by directory structure
+        // Filter for video files and (optional) telemetry sidecars
         const videoFiles = files.filter(file => {
             const isVideo = file.type.startsWith('video/') || 
                            file.name.toLowerCase().endsWith('.mp4') ||
@@ -279,6 +291,15 @@ class TeslaCamPlayer {
             }
             return isVideo;
         });
+
+        const telemetryFiles = files.filter(file => {
+            const lower = file.name.toLowerCase();
+            return lower.endsWith('.json') || lower.endsWith('.csv');
+        });
+
+        if (telemetryFiles.length > 0) {
+            this.log('Found potential telemetry sidecar files:', telemetryFiles.map(f => f.name));
+        }
         
         this.log('Video files found:', videoFiles.length);
         
@@ -288,7 +309,7 @@ class TeslaCamPlayer {
         }
 
         this.showSuccess(`Found ${videoFiles.length} video files in directory`);
-        this.processFiles(videoFiles);
+        this.processFiles(videoFiles, telemetryFiles);
     }
 
     handleDragOver(event) {
@@ -330,17 +351,15 @@ class TeslaCamPlayer {
         })).then(() => {
             if (files.length > 0) {
                 this.showSuccess(`Found ${files.length} video files`);
-                this.processFiles(files);
+                this.processFiles(files, []);
             } else {
                 this.showError('No video files found in the dropped items.');
             }
         });
     }
 
-    processFiles(files) {
-        const videoFiles = files.filter(file => file.type.startsWith('video/'));
-        
-        if (videoFiles.length === 0) {
+    processFiles(videoFiles, telemetryFiles = []) {
+        if (!Array.isArray(videoFiles) || videoFiles.length === 0) {
             this.showError('No video files found. Please select video files.');
             return;
         }
@@ -370,6 +389,12 @@ class TeslaCamPlayer {
 
         // Group videos by events
         this.groupVideosByEvents();
+
+        // Telemetry: attempt to extract from newer TeslaCam MP4 metadata tracks.
+        // This runs in the background and updates the UI when ready.
+        if (this.telemetryEnabled) {
+            this.extractTelemetryForEvents(telemetryFiles);
+        }
         
         // Update UI
         this.updateFileCount();
@@ -717,6 +742,9 @@ class TeslaCamPlayer {
         
         // Update timeline
         this.updateTimeline();
+
+        // Telemetry for this event (if extracted)
+        this.refreshTelemetryPanel();
         
         // Update dropdown selection to reflect current event
         this.updateEventDropdown();
@@ -815,6 +843,7 @@ class TeslaCamPlayer {
                     this.currentTimeSpan.textContent = this.formatTime(mainVideo.currentTime || 0);
                     this.totalTimeSpan.textContent = this.formatTime(mainVideo.duration);
                     this.timeline.value = mainVideo.currentTime || 0;
+                    this.updateTelemetryDisplay(mainVideo.currentTime || 0);
                 }
             };
             
@@ -828,6 +857,316 @@ class TeslaCamPlayer {
             
             this.log('Timeline setup complete. Max duration:', mainVideo.duration);
         }
+    }
+
+    // ---------------------------
+    // Telemetry
+    // ---------------------------
+
+    async extractTelemetryForEvents(sidecarFiles = []) {
+        try {
+            // Basic UI state
+            if (this.telemetryPanel && this.telemetryStatus) {
+                this.telemetryPanel.style.display = 'flex';
+                this.telemetryStatus.textContent = 'Telemetry: scanning videos…';
+            }
+
+            // 1) Optional sidecars (best-effort). We only support simple JSON formats.
+            const sidecarByTimestamp = await this.parseTelemetrySidecars(sidecarFiles);
+
+            // 2) Embedded timed metadata tracks (best-effort via MP4Box)
+            const tasks = this.events.map(async (evt, eventIndex) => {
+                // Prefer Front camera as canonical
+                const videoInfo = (evt.videos || []).find(v => v.camera === 'Front') || (evt.videos || [])[0];
+                if (!videoInfo?.file) return;
+
+                // If sidecar matches this event timestamp, prefer it.
+                const ts = evt.timestamp || (videoInfo.timestamp ?? null);
+                if (ts && sidecarByTimestamp.has(ts)) {
+                    this.telemetryByEventIndex.set(eventIndex, sidecarByTimestamp.get(ts));
+                    return;
+                }
+
+                const telemetry = await this.parseMp4Telemetry(videoInfo.file);
+                if (telemetry?.points?.length) {
+                    this.telemetryByEventIndex.set(eventIndex, telemetry);
+                }
+            });
+
+            await Promise.allSettled(tasks);
+
+            // Set current event telemetry
+            this.currentTelemetry = this.telemetryByEventIndex.get(this.currentEventIndex) || null;
+            this.refreshTelemetryPanel();
+
+        } catch (e) {
+            this.logError('Telemetry extraction failed:', e);
+            // Hide telemetry panel if we can't do anything useful
+            if (this.telemetryPanel) this.telemetryPanel.style.display = 'none';
+        }
+    }
+
+    async parseTelemetrySidecars(files) {
+        const map = new Map();
+        if (!files || files.length === 0) return map;
+
+        for (const file of files) {
+            try {
+                if (!file.name.toLowerCase().endsWith('.json')) continue;
+                const text = await file.text();
+                const parsed = JSON.parse(text);
+
+                // Expected best-effort formats:
+                // A) { timestamp: "2025-01-01_12-00-00", points: [{t:0.0, data:{...}}] }
+                // B) { eventTimestamp: "...", telemetry: [...] }
+                const ts = parsed.timestamp || parsed.eventTimestamp || parsed.event || null;
+                const points = parsed.points || parsed.telemetry || parsed.data || null;
+                if (!ts || !Array.isArray(points)) continue;
+
+                const normalized = points
+                    .map(p => {
+                        const t = typeof p.t === 'number' ? p.t : (typeof p.time === 'number' ? p.time : null);
+                        const data = p.data || p.values || p;
+                        if (t === null || typeof data !== 'object') return null;
+                        return { t, data };
+                    })
+                    .filter(Boolean)
+                    .sort((a, b) => a.t - b.t);
+
+                const keys = this.collectTelemetryKeys(normalized);
+                map.set(ts, { points: normalized, keys, source: `sidecar:${file.name}` });
+            } catch (e) {
+                this.log('Ignoring sidecar (parse failed):', file.name, e?.message);
+            }
+        }
+
+        return map;
+    }
+
+    collectTelemetryKeys(points) {
+        const keys = new Set();
+        for (const p of points || []) {
+            if (!p?.data) continue;
+            Object.keys(p.data).forEach(k => {
+                if (k === 't' || k === 'time' || k === 'timestamp') return;
+                keys.add(k);
+            });
+        }
+        return Array.from(keys);
+    }
+
+    async parseMp4Telemetry(file) {
+        // MP4Box must be loaded via vendor script
+        if (typeof MP4Box === 'undefined' || !file) return null;
+
+        return await new Promise(async (resolve) => {
+            let resolved = false;
+            const finalize = (telemetry) => {
+                if (resolved) return;
+                resolved = true;
+                resolve(telemetry);
+            };
+
+            try {
+                const mp4boxfile = MP4Box.createFile();
+                const trackTimescales = new Map();
+                const points = [];
+
+                let idleTimer = null;
+                const armIdleFinalize = () => {
+                    if (idleTimer) clearTimeout(idleTimer);
+                    idleTimer = setTimeout(() => {
+                        if (!points.length) return finalize(null);
+                        points.sort((a, b) => a.t - b.t);
+                        const keys = this.collectTelemetryKeys(points);
+                        finalize({ points, keys, source: 'embedded-mp4' });
+                    }, 400);
+                };
+
+                mp4boxfile.onReady = (info) => {
+                    try {
+                        const tracks = (info.tracks || []);
+                        // Heuristic: metadata/subtitle-ish tracks often carry telemetry as text or JSON
+                        const candidateTracks = tracks.filter(t => {
+                            const codec = (t.codec || '').toLowerCase();
+                            const type = (t.type || '').toLowerCase();
+                            return type.includes('meta') || type.includes('subtitle') ||
+                                codec.includes('mett') || codec.includes('metx') || codec.includes('wvtt') || codec.includes('stpp');
+                        });
+
+                        candidateTracks.forEach(t => {
+                            trackTimescales.set(t.id, t.timescale || info.timescale || 1);
+                            mp4boxfile.setExtractionOptions(t.id, null, { nbSamples: 1000 });
+                        });
+
+                        if (candidateTracks.length === 0) {
+                            return finalize(null);
+                        }
+
+                        mp4boxfile.start();
+                    } catch (e) {
+                        finalize(null);
+                    }
+                };
+
+                mp4boxfile.onSamples = (trackId, _user, samples) => {
+                    try {
+                        const timescale = trackTimescales.get(trackId) || 1;
+                        for (const s of samples) {
+                            const t = (s.cts ?? s.dts ?? 0) / timescale;
+                            if (!s.data) continue;
+
+                            // Try to decode sample payload as UTF-8 text
+                            let text = null;
+                            try {
+                                text = new TextDecoder('utf-8', { fatal: false }).decode(s.data);
+                            } catch {
+                                text = null;
+                            }
+                            if (!text) continue;
+
+                            const trimmed = text.trim();
+                            if (!trimmed) continue;
+
+                            let data = null;
+                            try {
+                                data = JSON.parse(trimmed);
+                            } catch {
+                                // As a fallback, allow key=value;key=value
+                                if (trimmed.includes('=') && trimmed.includes(';')) {
+                                    data = Object.fromEntries(trimmed.split(';').map(kv => kv.split('=').map(x => x.trim())).filter(x => x.length === 2));
+                                }
+                            }
+
+                            if (data && typeof data === 'object') {
+                                points.push({ t, data });
+                            }
+                        }
+                        armIdleFinalize();
+                    } catch {
+                        // ignore
+                    }
+                };
+
+                const buffer = await file.arrayBuffer();
+                buffer.fileStart = 0;
+                mp4boxfile.appendBuffer(buffer);
+                mp4boxfile.flush();
+
+                // In case there are no samples events
+                setTimeout(() => finalize(points.length ? { points: points.sort((a, b) => a.t - b.t), keys: this.collectTelemetryKeys(points), source: 'embedded-mp4' } : null), 800);
+
+            } catch (e) {
+                finalize(null);
+            }
+        });
+    }
+
+    refreshTelemetryPanel() {
+        if (!this.telemetryPanel || !this.telemetryStatus || !this.telemetryValues) return;
+
+        this.currentTelemetry = this.telemetryByEventIndex.get(this.currentEventIndex) || null;
+
+        if (!this.currentTelemetry?.points?.length) {
+            this.telemetryPanel.style.display = 'none';
+            return;
+        }
+
+        this.telemetryPanel.style.display = 'flex';
+        const source = this.currentTelemetry.source ? ` (${this.currentTelemetry.source})` : '';
+        this.telemetryStatus.textContent = `Telemetry: detected${source}`;
+        this.updateTelemetryDisplay(0);
+    }
+
+    updateTelemetryDisplay(currentTimeSeconds) {
+        if (!this.telemetryPanel || !this.telemetryValues) return;
+        if (!this.currentTelemetry?.points?.length) return;
+
+        const point = this.getTelemetryAtTime(this.currentTelemetry.points, currentTimeSeconds);
+        if (!point?.data) return;
+
+        // Pick a small set of keys to render (prefer common ones)
+        const preferred = ['speed', 'speed_mph', 'speed_kph', 'mph', 'kph', 'gear', 'soc', 'battery', 'heading', 'lat', 'lon', 'latitude', 'longitude'];
+        const keys = [];
+        preferred.forEach(k => { if (k in point.data) keys.push(k); });
+        if (keys.length < 6) {
+            for (const k of Object.keys(point.data)) {
+                if (keys.includes(k)) continue;
+                if (keys.length >= 6) break;
+                if (typeof point.data[k] === 'object') continue;
+                keys.push(k);
+            }
+        }
+
+        this.telemetryValues.innerHTML = '';
+        keys.forEach(k => {
+            const pill = document.createElement('span');
+            pill.className = 'telemetry-pill';
+            pill.innerHTML = `<span class="k">${this.escapeHtml(k)}</span><span class="v">${this.escapeHtml(String(point.data[k]))}</span>`;
+            this.telemetryValues.appendChild(pill);
+        });
+    }
+
+    getTelemetryAtTime(points, t) {
+        if (!points || points.length === 0) return null;
+        // Binary search for last point with time <= t
+        let lo = 0;
+        let hi = points.length - 1;
+        let best = points[0];
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            const p = points[mid];
+            if (p.t <= t) {
+                best = p;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return best;
+    }
+
+    drawTelemetryOverlay(ctx, currentTimeSeconds, width, height) {
+        if (!this.currentTelemetry?.points?.length) return;
+        const point = this.getTelemetryAtTime(this.currentTelemetry.points, currentTimeSeconds);
+        if (!point?.data) return;
+
+        // Minimal HUD-like overlay at the top
+        const pad = Math.max(10, Math.floor(width * 0.01));
+        const barH = Math.max(44, Math.floor(height * 0.06));
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.fillRect(0, 0, width, barH);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = `${Math.max(18, Math.floor(barH * 0.45))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'middle';
+
+        const parts = [];
+        const speed = point.data.speed ?? point.data.mph ?? point.data.kph ?? point.data.speed_mph ?? point.data.speed_kph;
+        if (speed !== undefined) parts.push(`Speed: ${speed}`);
+        const gear = point.data.gear;
+        if (gear !== undefined) parts.push(`Gear: ${gear}`);
+        const soc = point.data.soc ?? point.data.battery;
+        if (soc !== undefined) parts.push(`SoC: ${soc}`);
+
+        // Fallback: show first few primitive values
+        if (parts.length === 0) {
+            const keys = Object.keys(point.data).filter(k => typeof point.data[k] !== 'object').slice(0, 3);
+            keys.forEach(k => parts.push(`${k}: ${point.data[k]}`));
+        }
+
+        ctx.fillText(parts.join('   •   '), pad, barH / 2);
+        ctx.restore();
+    }
+
+    escapeHtml(str) {
+        return str
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
     }
 
     formatTime(seconds) {
@@ -1339,6 +1678,10 @@ class TeslaCamPlayer {
 
             this.log(`Found original video: ${originalVideoInfo.name} for camera: ${videoInfo.camera}`);
 
+            // Ensure telemetry context matches the original event for correct overlay timing
+            const previousTelemetry = this.currentTelemetry;
+            this.currentTelemetry = this.telemetryByEventIndex.get(clip.originalEvent) || this.currentTelemetry;
+
             // Create a hidden video element for this specific video
             const hiddenVideo = document.createElement('video');
             hiddenVideo.src = originalVideoInfo.objectUrl;
@@ -1395,6 +1738,9 @@ class TeslaCamPlayer {
 
             // Clean up the hidden video element
             document.body.removeChild(hiddenVideo);
+
+            // Restore telemetry context
+            this.currentTelemetry = previousTelemetry;
 
             // Complete progress
             this.updateProgress(100, 'Download completed!');
@@ -1491,6 +1837,7 @@ class TeslaCamPlayer {
                 // Only draw frame at specified frame rate
                 if (currentTime - lastFrameTime >= frameInterval) {
                     ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                    this.drawTelemetryOverlay(ctx, hiddenVideo.currentTime, width, height);
                     lastFrameTime = currentTime;
                     
                     // Log progress every second
@@ -1589,6 +1936,7 @@ class TeslaCamPlayer {
                     // Optimized frame processing for WebCodecs
                     if (currentTime - lastFrameTime >= frameInterval) {
                         ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                        this.drawTelemetryOverlay(ctx, hiddenVideo.currentTime, width, height);
                         lastFrameTime = currentTime;
                     }
                     
@@ -1876,6 +2224,7 @@ class TeslaCamPlayer {
                     // Only draw frame at specified frame rate
                     if (currentTime - lastFrameTime >= frameInterval) {
                         ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                        this.drawTelemetryOverlay(ctx, hiddenVideo.currentTime, width, height);
                         lastFrameTime = currentTime;
                         
                         // Update progress based on video playback
@@ -2023,6 +2372,7 @@ class TeslaCamPlayer {
                         // Optimized frame processing for WebCodecs
                         if (currentTime - lastFrameTime >= frameInterval) {
                             ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                            this.drawTelemetryOverlay(ctx, hiddenVideo.currentTime, width, height);
                             lastFrameTime = currentTime;
                             
                             // Update progress based on video playback

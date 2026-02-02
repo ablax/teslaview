@@ -1,0 +1,50 @@
+/* Telemetry panel + export overlay helpers */
+
+.telemetry-panel {
+    margin: 10px 0 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    backdrop-filter: blur(6px);
+}
+
+.telemetry-panel .telemetry-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+    opacity: 0.9;
+}
+
+.telemetry-panel .telemetry-right {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.telemetry-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    font-variant-numeric: tabular-nums;
+}
+
+.telemetry-pill .k {
+    font-size: 0.8rem;
+    opacity: 0.75;
+}
+
+.telemetry-pill .v {
+    font-size: 1rem;
+    font-weight: 600;
+}
