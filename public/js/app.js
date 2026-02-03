@@ -1423,7 +1423,12 @@ class TeslaCamPlayer {
 
         if (!this.currentTelemetry?.points?.length) {
             this.telemetryPanel.style.display = 'flex';
-            this.telemetryStatus.textContent = 'Telemetry: not detected';
+            const s = this.lastTelemetryScanStats;
+            if (s && typeof s === 'object') {
+                this.telemetryStatus.textContent = `Telemetry: not detected (mode=${s.mode}, nal=${s.nal}, sei=${s.sei}, user=${s.userData}, decoded=${s.decoded})`;
+            } else {
+                this.telemetryStatus.textContent = 'Telemetry: not detected';
+            }
             this.telemetryValues.innerHTML = '';
             return;
         }
