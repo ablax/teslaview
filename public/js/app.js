@@ -1259,6 +1259,21 @@ class TeslaCamPlayer {
     }
 
     async parseTeslaTelemetryFromMdat(file) {
+        // Always populate stats, even on early-exit paths.
+        const stats = { nal: 0, sei: 0, userData: 0, decoded: 0, mode: 'avc-length', reason: '' };
+
+        const setNoTelemetry = (reason) => {
+            stats.reason = reason || stats.reason || 'unknown';
+            this.lastTelemetryScanStats = stats;
+            // Keep UI updated even in production mode.
+            if (this.telemetryPanel && this.telemetryStatus) {
+                this.telemetryPanel.style.display = 'flex';
+                this.telemetryStatus.textContent = `Telemetry: not detected (reason=${stats.reason}, mode=${stats.mode}, nal=${stats.nal}, sei=${stats.sei}, user=${stats.userData}, decoded=${stats.decoded})`;
+            }
+            try { console.warn('Telemetry not detected. Stats:', stats); } catch {}
+            return null;
+        };
+
         try {
             const buf = await file.arrayBuffer();
             const u8 = new Uint8Array(buf);
@@ -1297,12 +1312,13 @@ class TeslaCamPlayer {
                 pos += boxSize;
             }
 
-            if (mdatStart < 0 || mdatEnd <= mdatStart) return null;
+            if (mdatStart < 0 || mdatEnd <= mdatStart) {
+                return setNoTelemetry('no-mdat-found');
+            }
 
             // Scan NAL units inside mdat.
             // Preferred: MP4/AVC length-prefixed NALs [uint32 nalSize][nalBytes...]
             // Fallback: Annex-B start codes 00 00 01 / 00 00 00 01
-            const stats = { nal: 0, sei: 0, userData: 0, decoded: 0, mode: 'avc-length' };
 
             let pending = null;
             let frameIndex = 0;
@@ -1397,21 +1413,24 @@ class TeslaCamPlayer {
             }
 
             if (!points.length) {
-                this.lastTelemetryScanStats = stats;
-                // Show something even in production mode (where console logs are disabled)
-                if (this.telemetryPanel && this.telemetryStatus) {
-                    this.telemetryPanel.style.display = 'flex';
-                    this.telemetryStatus.textContent = `Telemetry: not detected (mode=${stats.mode}, nal=${stats.nal}, sei=${stats.sei}, user=${stats.userData}, decoded=${stats.decoded})`;
-                }
-                // Always log a warning (even in production)
-                try { console.warn('Telemetry not detected. Stats:', stats); } catch {}
-                return null;
+                return setNoTelemetry(stats.decoded === 0 && stats.sei === 0 && stats.nal === 0 ? 'no-nals' : 'no-telemetry-points');
             }
             points.sort((a, b) => a.t - b.t);
             return { points, keys: this.collectTelemetryKeys(points), source: 'mdat-scan' };
 
         } catch (e) {
-            this.log('parseTeslaTelemetryFromMdat failed:', e?.message);
+            // Ensure we still show stats if something throws.
+            try { console.warn('parseTeslaTelemetryFromMdat failed:', e?.message); } catch {}
+            if (!this.lastTelemetryScanStats) {
+                this.lastTelemetryScanStats = { nal: 0, sei: 0, userData: 0, decoded: 0, mode: 'unknown', reason: 'exception' };
+            } else {
+                this.lastTelemetryScanStats.reason = this.lastTelemetryScanStats.reason || 'exception';
+            }
+            if (this.telemetryPanel && this.telemetryStatus) {
+                const s = this.lastTelemetryScanStats;
+                this.telemetryPanel.style.display = 'flex';
+                this.telemetryStatus.textContent = `Telemetry: not detected (reason=${s.reason || 'exception'}, mode=${s.mode || 'unknown'}, nal=${s.nal || 0}, sei=${s.sei || 0}, user=${s.userData || 0}, decoded=${s.decoded || 0})`;
+            }
             return null;
         }
     }
