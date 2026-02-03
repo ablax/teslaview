@@ -973,7 +973,8 @@ class TeslaCamPlayer {
             if (u8.byteLength >= 6) {
                 const speedMaybe = dv.getFloat32(2, true);
                 if (Number.isFinite(speedMaybe) && speedMaybe >= 0 && speedMaybe <= 250) {
-                    out.speed_mph = Math.round(speedMaybe * 10) / 10;
+                    // Fallback heuristic (if protobuf decode fails): treat value as mph and convert to km/h
+                    out.speed_kmh = Math.round((speedMaybe * 1.609344) * 10) / 10;
                 }
             }
             if (u8.byteLength >= 20) {
@@ -1094,7 +1095,7 @@ class TeslaCamPlayer {
                     const v = readFixed32Float();
                     if (v !== null && Number.isFinite(v)) {
                         out.vehicle_speed_mps = v;
-                        out.speed_mph = Math.round((v * 2.2369362920544) * 10) / 10;
+                        out.speed_kmh = Math.round((v * 3.6) * 10) / 10;
                     }
                     break;
                 }
@@ -1534,7 +1535,7 @@ class TeslaCamPlayer {
         if (!point?.data) return;
 
         // Pick a small set of keys to render (prefer common ones)
-        const preferred = ['speed_mph', 'vehicle_speed_mps', 'gear_state', 'autopilot_state', 'brake_applied', 'blinker_on_left', 'blinker_on_right', 'heading_deg', 'lat', 'lon', 'steering_wheel_angle', 'accelerator_pedal_position'];
+        const preferred = ['speed_kmh', 'vehicle_speed_mps', 'gear_state', 'autopilot_state', 'brake_applied', 'blinker_on_left', 'blinker_on_right', 'heading_deg', 'lat', 'lon', 'steering_wheel_angle', 'accelerator_pedal_position'];
         const keys = [];
         preferred.forEach(k => { if (k in point.data) keys.push(k); });
         if (keys.length < 6) {
@@ -1591,8 +1592,8 @@ class TeslaCamPlayer {
         ctx.textBaseline = 'middle';
 
         const parts = [];
-        const speed = point.data.speed_mph ?? point.data.mph;
-        if (speed !== undefined) parts.push(`Speed: ${speed} mph`);
+        const speed = point.data.speed_kmh ?? point.data.kph;
+        if (speed !== undefined) parts.push(`Speed: ${speed} km/h`);
 
         const gear = point.data.gear_state;
         if (gear !== undefined) {
