@@ -1,10 +1,64 @@
-/* Telemetry panel + export overlay helpers */
+/* Telemetry panel + HUD overlay */
+
+.telemetry-hud {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    pointer-events: none;
+}
+
+.telemetry-hud-inner {
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    border-radius: 10px;
+    padding: 10px 18px 12px;
+    min-width: 220px;
+    text-align: center;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+}
+
+.telemetry-hud-gear {
+    font-size: 14px;
+    letter-spacing: 0.18em;
+    opacity: 0.95;
+    margin-bottom: 2px;
+}
+
+.telemetry-hud-speed {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.telemetry-hud-speed-value {
+    font-size: 46px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.telemetry-hud-speed-unit {
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    opacity: 0.9;
+    margin-top: 2px;
+}
+
+.telemetry-hud-sub {
+    margin-top: 6px;
+    font-size: 13px;
+    opacity: 0.85;
+}
 
 .telemetry-panel {
     margin: 10px 0 0;
     padding: 10px 12px;
     border-radius: 10px;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.35);
     color: #fff;
     display: flex;
     justify-content: space-between;

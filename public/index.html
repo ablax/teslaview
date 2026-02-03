@@ -121,7 +121,19 @@
                 </div>
             </div>
 
-            <!-- Telemetry (if available in newer TeslaCam videos) -->
+            <!-- Telemetry HUD (overlay) -->
+            <div class="telemetry-hud" id="telemetryHud" style="display: none;">
+                <div class="telemetry-hud-inner">
+                    <div class="telemetry-hud-gear" id="telemetryHudGear">DRIVE</div>
+                    <div class="telemetry-hud-speed">
+                        <span class="telemetry-hud-speed-value" id="telemetryHudSpeed">0</span>
+                        <div class="telemetry-hud-speed-unit" id="telemetryHudUnit">KM/H</div>
+                    </div>
+                    <div class="telemetry-hud-sub" id="telemetryHudSub">Manual</div>
+                </div>
+            </div>
+
+            <!-- Telemetry debug/status (kept small; can be hidden later) -->
             <div class="telemetry-panel" id="telemetryPanel" style="display: none;">
                 <div class="telemetry-left">
                     <span class="telemetry-item" id="telemetryStatus">Telemetry: not detected</span>

@@ -52,7 +52,13 @@ class TeslaCamPlayer {
         // Video elements
         this.videoGrid = document.getElementById('videoGrid');
 
-        // Telemetry elements
+        // Telemetry HUD + debug panel
+        this.telemetryHud = document.getElementById('telemetryHud');
+        this.telemetryHudGear = document.getElementById('telemetryHudGear');
+        this.telemetryHudSpeed = document.getElementById('telemetryHudSpeed');
+        this.telemetryHudUnit = document.getElementById('telemetryHudUnit');
+        this.telemetryHudSub = document.getElementById('telemetryHudSub');
+
         this.telemetryPanel = document.getElementById('telemetryPanel');
         this.telemetryStatus = document.getElementById('telemetryStatus');
         this.telemetryValues = document.getElementById('telemetryValues');
@@ -1511,6 +1517,7 @@ class TeslaCamPlayer {
 
         if (!this.currentTelemetry?.points?.length) {
             this.telemetryPanel.style.display = 'flex';
+            if (this.telemetryHud) this.telemetryHud.style.display = 'none';
             const s = this.lastTelemetryScanStats;
             if (s && typeof s === 'object') {
                 this.telemetryStatus.textContent = `Telemetry: not detected (mode=${s.mode}, nal=${s.nal}, sei=${s.sei}, user=${s.userData}, decoded=${s.decoded})`;
@@ -1528,11 +1535,33 @@ class TeslaCamPlayer {
     }
 
     updateTelemetryDisplay(currentTimeSeconds) {
-        if (!this.telemetryPanel || !this.telemetryValues) return;
         if (!this.currentTelemetry?.points?.length) return;
 
         const point = this.getTelemetryAtTime(this.currentTelemetry.points, currentTimeSeconds);
         if (!point?.data) return;
+
+        // HUD (overlay)
+        if (this.telemetryHud) {
+            this.telemetryHud.style.display = 'block';
+
+            // Gear
+            const gear = point.data.gear_state;
+            const gearLabel = ({0:'PARK',1:'DRIVE',2:'REVERSE',3:'NEUTRAL'})[gear] ?? 'DRIVE';
+            if (this.telemetryHudGear) this.telemetryHudGear.textContent = gearLabel;
+
+            // Speed (km/h)
+            const speed = point.data.speed_kmh ?? point.data.kph;
+            if (this.telemetryHudSpeed) this.telemetryHudSpeed.textContent = (speed !== undefined) ? String(speed) : '—';
+            if (this.telemetryHudUnit) this.telemetryHudUnit.textContent = 'KM/H';
+
+            // Sub status
+            const ap = point.data.autopilot_state;
+            const apLabel = ap === undefined ? 'Manual' : (({0:'Manual',1:'FSD',2:'Autosteer',3:'TACC'})[ap] ?? 'Manual');
+            if (this.telemetryHudSub) this.telemetryHudSub.textContent = apLabel;
+        }
+
+        // Debug pills panel
+        if (!this.telemetryPanel || !this.telemetryValues) return;
 
         // Pick a small set of keys to render (prefer common ones)
         const preferred = ['speed_kmh', 'vehicle_speed_mps', 'gear_state', 'autopilot_state', 'brake_applied', 'blinker_on_left', 'blinker_on_right', 'heading_deg', 'lat', 'lon', 'steering_wheel_angle', 'accelerator_pedal_position'];
@@ -1580,43 +1609,46 @@ class TeslaCamPlayer {
         const point = this.getTelemetryAtTime(this.currentTelemetry.points, currentTimeSeconds);
         if (!point?.data) return;
 
-        // Minimal HUD-like overlay at the top
-        const pad = Math.max(10, Math.floor(width * 0.01));
-        const barH = Math.max(44, Math.floor(height * 0.06));
-        ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-        ctx.fillRect(0, 0, width, barH);
-
-        ctx.fillStyle = '#fff';
-        ctx.font = `${Math.max(18, Math.floor(barH * 0.45))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
-        ctx.textBaseline = 'middle';
-
-        const parts = [];
-        const speed = point.data.speed_kmh ?? point.data.kph;
-        if (speed !== undefined) parts.push(`Speed: ${speed} km/h`);
+        // Tesla-like HUD overlay at the top center (burned into exports)
+        const barH = Math.max(64, Math.floor(height * 0.11));
+        const hudW = Math.min(Math.floor(width * 0.42), 360);
+        const hudX = Math.floor((width - hudW) / 2);
+        const hudY = Math.floor(Math.max(8, height * 0.015));
 
         const gear = point.data.gear_state;
-        if (gear !== undefined) {
-            const g = ({0:'P',1:'D',2:'R',3:'N'})[gear] ?? String(gear);
-            parts.push(`Gear: ${g}`);
-        }
+        const gearLabel = ({0:'PARK',1:'DRIVE',2:'REVERSE',3:'NEUTRAL'})[gear] ?? '';
+        const speed = point.data.speed_kmh ?? point.data.kph;
+        const speedText = (speed !== undefined) ? String(speed) : '—';
+        const ap = point.data.autopilot_state;
+        const apLabel = ap === undefined ? 'Manual' : (({0:'Manual',1:'FSD',2:'Autosteer',3:'TACC'})[ap] ?? 'Manual');
 
-        if (point.data.brake_applied !== undefined) {
-            parts.push(`Brake: ${point.data.brake_applied ? 'ON' : 'off'}`);
-        }
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+        ctx.fillRect(hudX, hudY, hudW, barH);
 
-        if (point.data.autopilot_state !== undefined) {
-            const ap = ({0:'NONE',1:'FSD',2:'AUTOSTEER',3:'TACC'})[point.data.autopilot_state] ?? String(point.data.autopilot_state);
-            parts.push(`AP: ${ap}`);
-        }
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
 
-        // Fallback: show first few primitive values
-        if (parts.length === 0) {
-            const keys = Object.keys(point.data).filter(k => typeof point.data[k] !== 'object').slice(0, 3);
-            keys.forEach(k => parts.push(`${k}: ${point.data[k]}`));
-        }
+        // Gear
+        ctx.font = `${Math.max(14, Math.floor(barH * 0.22))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.fillText(gearLabel, hudX + hudW / 2, hudY + 6);
 
-        ctx.fillText(parts.join('   •   '), pad, barH / 2);
+        // Speed
+        ctx.font = `${Math.max(34, Math.floor(barH * 0.55))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(speedText, hudX + hudW / 2, hudY + barH * 0.55);
+
+        // Unit
+        ctx.font = `${Math.max(12, Math.floor(barH * 0.18))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('KM/H', hudX + hudW / 2, hudY + barH - 6);
+
+        // Sub
+        ctx.font = `${Math.max(12, Math.floor(barH * 0.18))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(apLabel, hudX + hudW / 2, hudY + barH + Math.max(14, Math.floor(barH * 0.2)));
+
         ctx.restore();
     }
 
