@@ -121,27 +121,7 @@
                 </div>
             </div>
 
-            <!-- Telemetry HUD (overlay) -->
-            <div class="telemetry-hud" id="telemetryHud" style="display: none;">
-                <div class="telemetry-hud-inner">
-                    <div class="telemetry-hud-gear" id="telemetryHudGear">DRIVE</div>
-                    <div class="telemetry-hud-speed">
-                        <span class="telemetry-hud-speed-value" id="telemetryHudSpeed">0</span>
-                        <div class="telemetry-hud-speed-unit" id="telemetryHudUnit">KM/H</div>
-                    </div>
-                    <div class="telemetry-hud-sub" id="telemetryHudSub">Manual</div>
-                    <div class="telemetry-hud-row">
-                        <span class="telemetry-hud-indicator" id="telemetryHudBlinkers">◀ ▶</span>
-                        <span class="telemetry-hud-metric" id="telemetryHudBrake">BRAKE</span>
-                    </div>
-                    <div class="telemetry-hud-row">
-                        <span class="telemetry-hud-metric" id="telemetryHudThrottle">THR —%</span>
-                        <span class="telemetry-hud-metric" id="telemetryHudSteering">STEER —°</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Telemetry debug/status (kept small; can be hidden later) -->
+            <!-- Telemetry debug/status (hidden unless debugTelemetry=1) -->
             <div class="telemetry-panel" id="telemetryPanel" style="display: none;">
                 <div class="telemetry-left">
                     <span class="telemetry-item" id="telemetryStatus">Telemetry: not detected</span>
@@ -151,6 +131,27 @@
 
             <!-- Video Grid -->
             <div class="video-grid" id="videoGrid">
+                <!-- Telemetry HUD (overlay) -->
+                <div class="telemetry-hud" id="telemetryHud" style="display: none;">
+                    <div class="telemetry-hud-bar">
+                        <div class="telemetry-hud-side telemetry-hud-side-left"></div>
+                        <div class="telemetry-hud-center">
+                            <div class="telemetry-hud-gear" id="telemetryHudGear">DRIVE</div>
+                            <div class="telemetry-hud-speed">
+                                <span class="telemetry-hud-speed-value" id="telemetryHudSpeed">0</span>
+                                <div class="telemetry-hud-speed-unit" id="telemetryHudUnit">KM/H</div>
+                            </div>
+                            <div class="telemetry-hud-sub" id="telemetryHudSub">Manual</div>
+                        </div>
+                        <div class="telemetry-hud-side telemetry-hud-side-right">
+                            <span class="telemetry-hud-indicator" id="telemetryHudBlinkers">◁ ▷</span>
+                            <span class="telemetry-hud-metric" id="telemetryHudBrake">—</span>
+                            <span class="telemetry-hud-metric" id="telemetryHudThrottle">THR —%</span>
+                            <span class="telemetry-hud-metric" id="telemetryHudSteering">STEER —°</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Videos will be dynamically added here -->
             </div>
             

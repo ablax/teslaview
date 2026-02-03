@@ -3,21 +3,42 @@
 .telemetry-hud {
     position: absolute;
     top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 10px;
+    right: 10px;
     z-index: 20;
     pointer-events: none;
 }
 
-.telemetry-hud-inner {
+.telemetry-hud-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
     background: rgba(0, 0, 0, 0.65);
     backdrop-filter: blur(6px);
     color: #fff;
     border-radius: 10px;
-    padding: 10px 18px 12px;
-    min-width: 220px;
-    text-align: center;
+    padding: 10px 14px;
     box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+}
+
+.telemetry-hud-side {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 140px;
+    opacity: 0.95;
+}
+
+.telemetry-hud-side-right {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    row-gap: 6px;
+}
+
+.telemetry-hud-center {
+    flex: 1;
+    text-align: center;
 }
 
 .telemetry-hud-gear {
@@ -55,17 +76,20 @@
 }
 
 .telemetry-hud-row {
-    margin-top: 6px;
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    font-size: 12px;
-    opacity: 0.9;
-    font-variant-numeric: tabular-nums;
+    display: none;
 }
 
 .telemetry-hud-indicator {
     letter-spacing: 0.25em;
+    font-variant-numeric: tabular-nums;
+}
+
+.telemetry-hud-indicator.blink-dim {
+    opacity: 0.35;
+}
+
+.telemetry-hud-indicator.blink-on {
+    opacity: 1;
 }
 
 .telemetry-hud-metric {

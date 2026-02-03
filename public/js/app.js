@@ -29,6 +29,20 @@ class TeslaCamPlayer {
         
         this.initializeElements();
         this.bindEvents();
+
+        // Blinker animation timer
+        this._blinkPhaseOn = false;
+        setInterval(() => {
+            if (!this.telemetryHudBlinkers) return;
+            const any = this._blinkLeftActive || this._blinkRightActive;
+            if (!any) {
+                this.telemetryHudBlinkers.classList.remove('blink-on');
+                this._blinkPhaseOn = false;
+                return;
+            }
+            this._blinkPhaseOn = !this._blinkPhaseOn;
+            this.telemetryHudBlinkers.classList.toggle('blink-on', this._blinkPhaseOn);
+        }, 450);
     }
 
     initializeElements() {
@@ -66,6 +80,12 @@ class TeslaCamPlayer {
         this.telemetryPanel = document.getElementById('telemetryPanel');
         this.telemetryStatus = document.getElementById('telemetryStatus');
         this.telemetryValues = document.getElementById('telemetryValues');
+
+        this.telemetryDebugEnabled = false;
+        try {
+            const qs = new URLSearchParams(window.location.search);
+            this.telemetryDebugEnabled = qs.get('debugTelemetry') === '1';
+        } catch {}
         this.fileCountSpan = document.getElementById('fileCount');
         this.eventCountSpan = document.getElementById('eventCount');
         this.eventInfoSpan = document.getElementById('eventInfo');
@@ -1515,26 +1535,33 @@ class TeslaCamPlayer {
     }
 
     refreshTelemetryPanel() {
-        if (!this.telemetryPanel || !this.telemetryStatus || !this.telemetryValues) return;
-
         this.currentTelemetry = this.telemetryByEventIndex.get(this.currentEventIndex) || null;
 
+        // Debug panel is optional
+        if (this.telemetryPanel) {
+            this.telemetryPanel.style.display = this.telemetryDebugEnabled ? 'flex' : 'none';
+        }
+
         if (!this.currentTelemetry?.points?.length) {
-            this.telemetryPanel.style.display = 'flex';
             if (this.telemetryHud) this.telemetryHud.style.display = 'none';
-            const s = this.lastTelemetryScanStats;
-            if (s && typeof s === 'object') {
-                this.telemetryStatus.textContent = `Telemetry: not detected (mode=${s.mode}, nal=${s.nal}, sei=${s.sei}, user=${s.userData}, decoded=${s.decoded})`;
-            } else {
-                this.telemetryStatus.textContent = 'Telemetry: not detected';
+            if (this.telemetryDebugEnabled && this.telemetryStatus && this.telemetryValues) {
+                const s = this.lastTelemetryScanStats;
+                if (s && typeof s === 'object') {
+                    this.telemetryStatus.textContent = `Telemetry: not detected (mode=${s.mode}, nal=${s.nal}, sei=${s.sei}, user=${s.userData}, decoded=${s.decoded})`;
+                } else {
+                    this.telemetryStatus.textContent = 'Telemetry: not detected';
+                }
+                this.telemetryValues.innerHTML = '';
             }
-            this.telemetryValues.innerHTML = '';
             return;
         }
 
-        this.telemetryPanel.style.display = 'flex';
-        const source = this.currentTelemetry.source ? ` (${this.currentTelemetry.source})` : '';
-        this.telemetryStatus.textContent = `Telemetry: detected${source}`;
+        if (this.telemetryHud) this.telemetryHud.style.display = 'block';
+
+        if (this.telemetryDebugEnabled && this.telemetryStatus) {
+            const source = this.currentTelemetry.source ? ` (${this.currentTelemetry.source})` : '';
+            this.telemetryStatus.textContent = `Telemetry: detected${source}`;
+        }
         this.updateTelemetryDisplay(0);
     }
 
@@ -1563,14 +1590,14 @@ class TeslaCamPlayer {
             const apLabel = ap === undefined ? 'Manual' : (({0:'Manual',1:'FSD',2:'Autosteer',3:'TACC'})[ap] ?? 'Manual');
             if (this.telemetryHudSub) this.telemetryHudSub.textContent = apLabel;
 
-            // Blinkers
+            // Blinkers (animated)
             const bl = !!point.data.blinker_on_left;
             const br = !!point.data.blinker_on_right;
+            this._blinkLeftActive = bl;
+            this._blinkRightActive = br;
             if (this.telemetryHudBlinkers) {
-                const left = bl ? '◀' : '◁';
-                const right = br ? '▶' : '▷';
-                this.telemetryHudBlinkers.textContent = `${left} ${right}`;
-                this.telemetryHudBlinkers.style.opacity = (bl || br) ? '1' : '0.5';
+                this.telemetryHudBlinkers.textContent = `${bl ? '◀' : '◁'} ${br ? '▶' : '▷'}`;
+                this.telemetryHudBlinkers.classList.toggle('blink-dim', !(bl || br));
             }
 
             // Brake
