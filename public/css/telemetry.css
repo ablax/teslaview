@@ -54,6 +54,27 @@
     opacity: 0.85;
 }
 
+.telemetry-hud-row {
+    margin-top: 6px;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    font-size: 12px;
+    opacity: 0.9;
+    font-variant-numeric: tabular-nums;
+}
+
+.telemetry-hud-indicator {
+    letter-spacing: 0.25em;
+}
+
+.telemetry-hud-metric {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
 .telemetry-panel {
     margin: 10px 0 0;
     padding: 10px 12px;

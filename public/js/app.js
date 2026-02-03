@@ -58,6 +58,10 @@ class TeslaCamPlayer {
         this.telemetryHudSpeed = document.getElementById('telemetryHudSpeed');
         this.telemetryHudUnit = document.getElementById('telemetryHudUnit');
         this.telemetryHudSub = document.getElementById('telemetryHudSub');
+        this.telemetryHudBlinkers = document.getElementById('telemetryHudBlinkers');
+        this.telemetryHudBrake = document.getElementById('telemetryHudBrake');
+        this.telemetryHudThrottle = document.getElementById('telemetryHudThrottle');
+        this.telemetryHudSteering = document.getElementById('telemetryHudSteering');
 
         this.telemetryPanel = document.getElementById('telemetryPanel');
         this.telemetryStatus = document.getElementById('telemetryStatus');
@@ -1558,6 +1562,36 @@ class TeslaCamPlayer {
             const ap = point.data.autopilot_state;
             const apLabel = ap === undefined ? 'Manual' : (({0:'Manual',1:'FSD',2:'Autosteer',3:'TACC'})[ap] ?? 'Manual');
             if (this.telemetryHudSub) this.telemetryHudSub.textContent = apLabel;
+
+            // Blinkers
+            const bl = !!point.data.blinker_on_left;
+            const br = !!point.data.blinker_on_right;
+            if (this.telemetryHudBlinkers) {
+                const left = bl ? '◀' : '◁';
+                const right = br ? '▶' : '▷';
+                this.telemetryHudBlinkers.textContent = `${left} ${right}`;
+                this.telemetryHudBlinkers.style.opacity = (bl || br) ? '1' : '0.5';
+            }
+
+            // Brake
+            const brake = point.data.brake_applied;
+            if (this.telemetryHudBrake) {
+                this.telemetryHudBrake.textContent = brake ? 'BRAKE' : '—';
+                this.telemetryHudBrake.style.background = brake ? 'rgba(255, 60, 60, 0.35)' : 'rgba(255,255,255,0.10)';
+                this.telemetryHudBrake.style.borderColor = brake ? 'rgba(255, 60, 60, 0.55)' : 'rgba(255,255,255,0.16)';
+            }
+
+            // Throttle
+            if (this.telemetryHudThrottle) {
+                const thr = point.data.accelerator_pedal_position;
+                this.telemetryHudThrottle.textContent = (thr !== undefined) ? `THR ${Math.round(thr)}%` : 'THR —%';
+            }
+
+            // Steering
+            if (this.telemetryHudSteering) {
+                const steer = point.data.steering_wheel_angle;
+                this.telemetryHudSteering.textContent = (steer !== undefined) ? `STEER ${Math.round(steer)}°` : 'STEER —°';
+            }
         }
 
         // Debug pills panel
@@ -1610,8 +1644,8 @@ class TeslaCamPlayer {
         if (!point?.data) return;
 
         // Tesla-like HUD overlay at the top center (burned into exports)
-        const barH = Math.max(64, Math.floor(height * 0.11));
-        const hudW = Math.min(Math.floor(width * 0.42), 360);
+        const barH = Math.max(66, Math.floor(height * 0.11));
+        const hudW = Math.min(Math.floor(width * 0.44), 380);
         const hudX = Math.floor((width - hudW) / 2);
         const hudY = Math.floor(Math.max(8, height * 0.015));
 
@@ -1621,6 +1655,12 @@ class TeslaCamPlayer {
         const speedText = (speed !== undefined) ? String(speed) : '—';
         const ap = point.data.autopilot_state;
         const apLabel = ap === undefined ? 'Manual' : (({0:'Manual',1:'FSD',2:'Autosteer',3:'TACC'})[ap] ?? 'Manual');
+
+        const bl = !!point.data.blinker_on_left;
+        const br = !!point.data.blinker_on_right;
+        const brake = !!point.data.brake_applied;
+        const thr = point.data.accelerator_pedal_position;
+        const steer = point.data.steering_wheel_angle;
 
         ctx.save();
         ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
@@ -1648,6 +1688,20 @@ class TeslaCamPlayer {
         ctx.font = `${Math.max(12, Math.floor(barH * 0.18))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
         ctx.textBaseline = 'alphabetic';
         ctx.fillText(apLabel, hudX + hudW / 2, hudY + barH + Math.max(14, Math.floor(barH * 0.2)));
+
+        // Extra row (blinkers / brake / thr / steer)
+        ctx.font = `${Math.max(12, Math.floor(barH * 0.18))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'alphabetic';
+        const extrasY = hudY + barH + Math.max(30, Math.floor(barH * 0.55));
+        const left = bl ? '◀' : '◁';
+        const right = br ? '▶' : '▷';
+        const blText = `${left} ${right}`;
+        const thrText = (thr !== undefined) ? `THR ${Math.round(thr)}%` : 'THR —%';
+        const stText = (steer !== undefined) ? `STEER ${Math.round(steer)}°` : 'STEER —°';
+        const brakeText = brake ? 'BRAKE' : '—';
+        const extras = `${blText}    ${brakeText}    ${thrText}    ${stText}`;
+        ctx.globalAlpha = (bl || br || brake) ? 1 : 0.9;
+        ctx.fillText(extras, hudX + hudW / 2, extrasY);
 
         ctx.restore();
     }
