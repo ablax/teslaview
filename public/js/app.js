@@ -169,15 +169,7 @@ class TeslaCamPlayer {
         this.telemetryHudThrottle = document.getElementById('telemetryHudThrottle');
         this.telemetryHudSteering = document.getElementById('telemetryHudSteering');
 
-        this.telemetryPanel = document.getElementById('telemetryPanel');
-        this.telemetryStatus = document.getElementById('telemetryStatus');
-        this.telemetryValues = document.getElementById('telemetryValues');
-
-        this.telemetryDebugEnabled = false;
-        try {
-            const qs = new URLSearchParams(window.location.search);
-            this.telemetryDebugEnabled = qs.get('debugTelemetry') === '1';
-        } catch {}
+        // Telemetry debug panel removed for production
         this.fileCountSpan = document.getElementById('fileCount');
         this.eventCountSpan = document.getElementById('eventCount');
         this.eventInfoSpan = document.getElementById('eventInfo');
@@ -270,113 +262,7 @@ class TeslaCamPlayer {
         this.selectClipsBtn.addEventListener('click', () => this.toggleSelectMode());
         this.combineBtn.addEventListener('click', () => this.combineSelectedClips());
         
-        // Test progress overlay (remove in production)
-        if (!this.isProduction) {
-            window.testProgress = () => {
-                console.log('testProgress called');
-                this.showProgress('Test Progress', 'Testing progress overlay...');
-                let progress = 0;
-                const interval = setInterval(() => {
-                    progress += 10;
-                    console.log('Updating progress:', progress);
-                    this.updateProgress(progress, `Testing... ${progress}%`);
-                    if (progress >= 100) {
-                        clearInterval(interval);
-                        setTimeout(() => this.hideProgress(), 1000);
-                    }
-                }, 500);
-            };
-            
-            // Force hide progress overlay
-            window.forceHideProgress = () => {
-                console.log('Force hiding progress overlay');
-                const overlay = document.getElementById('progressOverlay');
-                if (overlay) {
-                    overlay.style.cssText = 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;';
-                }
-            };
-            
-            // Simple test with inline styles
-            window.testProgressSimple = () => {
-                console.log('testProgressSimple called');
-                const overlay = document.getElementById('progressOverlay');
-                overlay.style.cssText = `
-                    position: fixed !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    background: rgba(0, 0, 0, 0.9) !important;
-                    display: flex !important;
-                    justify-content: center !important;
-                    align-items: center !important;
-                    z-index: 9999 !important;
-                    visibility: visible !important;
-                    opacity: 1 !important;
-                `;
-                
-                const title = document.getElementById('progressTitle');
-                const status = document.getElementById('progressStatus');
-                const fill = document.getElementById('progressFill');
-                const text = document.getElementById('progressText');
-                
-                title.textContent = 'Simple Test';
-                status.textContent = 'Testing with inline styles...';
-                fill.style.width = '50%';
-                text.textContent = '50%';
-                
-                setTimeout(() => {
-                    overlay.style.display = 'none';
-                }, 3000);
-            };
-            
-            // Create overlay from scratch
-            window.testProgressFromScratch = () => {
-                console.log('testProgressFromScratch called');
-                
-                // Remove existing overlay
-                const existingOverlay = document.getElementById('progressOverlay');
-                if (existingOverlay) {
-                    existingOverlay.remove();
-                }
-                
-                // Create new overlay from scratch
-                const overlay = document.createElement('div');
-                overlay.id = 'testOverlay';
-                overlay.style.cssText = `
-                    position: fixed !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    background: rgba(255, 0, 0, 0.8) !important;
-                    display: flex !important;
-                    justify-content: center !important;
-                    align-items: center !important;
-                    z-index: 99999 !important;
-                    color: white !important;
-                    font-size: 24px !important;
-                    font-weight: bold !important;
-                `;
-                
-                overlay.innerHTML = `
-                    <div style="background: white; color: black; padding: 40px; border-radius: 10px; text-align: center;">
-                        <h2>TEST OVERLAY</h2>
-                        <p>This is a test overlay created from scratch</p>
-                        <div style="background: #ddd; width: 300px; height: 20px; border-radius: 10px; margin: 20px 0;">
-                            <div style="background: #667eea; width: 50%; height: 100%; border-radius: 10px;"></div>
-                        </div>
-                        <p>Progress: 50%</p>
-                    </div>
-                `;
-                
-                document.body.appendChild(overlay);
-                
-                setTimeout(() => {
-                    overlay.remove();
-                }, 3000);
-            };
-        }
+        // (dev-only progress overlay test helpers removed for production)
     }
 
     handleFileSelection(event) {
@@ -591,7 +477,7 @@ class TeslaCamPlayer {
             return new Date(fallbackMatch[1].replace(/_/g, '-'));
         }
         
-        console.warn('Could not extract timestamp from filename:', filename);
+        this.log('Could not extract timestamp from filename:', filename);
         return new Date();
     }
 
@@ -937,7 +823,7 @@ class TeslaCamPlayer {
         const time = parseFloat(timeValue);
         
         if (isNaN(time)) {
-            console.warn('Invalid time value:', timeValue);
+            this.log('Invalid time value:', timeValue);
             return;
         }
         
@@ -992,12 +878,6 @@ class TeslaCamPlayer {
 
     async extractTelemetryForEvents(sidecarFiles = []) {
         try {
-            // Basic UI state
-            if (this.telemetryPanel && this.telemetryStatus) {
-                this.telemetryPanel.style.display = 'flex';
-                this.telemetryStatus.textContent = 'Telemetry: scanning videos…';
-            }
-
             // 1) Optional sidecars (best-effort). We only support simple JSON formats.
             const sidecarByTimestamp = await this.parseTelemetrySidecars(sidecarFiles);
 
@@ -1028,8 +908,6 @@ class TeslaCamPlayer {
 
         } catch (e) {
             this.logError('Telemetry extraction failed:', e);
-            // Hide telemetry panel if we can't do anything useful
-            if (this.telemetryPanel) this.telemetryPanel.style.display = 'none';
         }
     }
 
@@ -1412,20 +1290,9 @@ class TeslaCamPlayer {
     }
 
     async parseTeslaTelemetryFromMdat(file) {
-        // Always populate stats, even on early-exit paths.
-        const stats = { nal: 0, sei: 0, userData: 0, decoded: 0, mode: 'avc-length', reason: '' };
-
-        const setNoTelemetry = (reason) => {
-            stats.reason = reason || stats.reason || 'unknown';
-            this.lastTelemetryScanStats = stats;
-            // Keep UI updated even in production mode.
-            if (this.telemetryPanel && this.telemetryStatus) {
-                this.telemetryPanel.style.display = 'flex';
-                this.telemetryStatus.textContent = `Telemetry: not detected (reason=${stats.reason}, mode=${stats.mode}, nal=${stats.nal}, sei=${stats.sei}, user=${stats.userData}, decoded=${stats.decoded})`;
-            }
-            try { console.warn('Telemetry not detected. Stats:', stats); } catch {}
-            return null;
-        };
+        // Production: no debug UI/logs; just return telemetry if found.
+        const stats = { nal: 0, sei: 0, userData: 0, decoded: 0, mode: 'avc-length' };
+        const setNoTelemetry = (_reason) => null;
 
         try {
             const buf = await file.arrayBuffer();
@@ -1614,19 +1481,7 @@ class TeslaCamPlayer {
             points.sort((a, b) => a.t - b.t);
             return { points, keys: this.collectTelemetryKeys(points), source: 'mdat-scan' };
 
-        } catch (e) {
-            // Ensure we still show stats if something throws.
-            try { console.warn('parseTeslaTelemetryFromMdat failed:', e?.message); } catch {}
-            if (!this.lastTelemetryScanStats) {
-                this.lastTelemetryScanStats = { nal: 0, sei: 0, userData: 0, decoded: 0, mode: 'unknown', reason: 'exception' };
-            } else {
-                this.lastTelemetryScanStats.reason = this.lastTelemetryScanStats.reason || 'exception';
-            }
-            if (this.telemetryPanel && this.telemetryStatus) {
-                const s = this.lastTelemetryScanStats;
-                this.telemetryPanel.style.display = 'flex';
-                this.telemetryStatus.textContent = `Telemetry: not detected (reason=${s.reason || 'exception'}, mode=${s.mode || 'unknown'}, nal=${s.nal || 0}, sei=${s.sei || 0}, user=${s.userData || 0}, decoded=${s.decoded || 0})`;
-            }
+        } catch (_e) {
             return null;
         }
     }
@@ -1634,31 +1489,12 @@ class TeslaCamPlayer {
     refreshTelemetryPanel() {
         this.currentTelemetry = this.telemetryByEventIndex.get(this.currentEventIndex) || null;
 
-        // Debug panel is optional
-        if (this.telemetryPanel) {
-            this.telemetryPanel.style.display = this.telemetryDebugEnabled ? 'flex' : 'none';
-        }
-
         if (!this.currentTelemetry?.points?.length) {
             if (this.telemetryHud) this.telemetryHud.style.display = 'none';
-            if (this.telemetryDebugEnabled && this.telemetryStatus && this.telemetryValues) {
-                const s = this.lastTelemetryScanStats;
-                if (s && typeof s === 'object') {
-                    this.telemetryStatus.textContent = `Telemetry: not detected (mode=${s.mode}, nal=${s.nal}, sei=${s.sei}, user=${s.userData}, decoded=${s.decoded})`;
-                } else {
-                    this.telemetryStatus.textContent = 'Telemetry: not detected';
-                }
-                this.telemetryValues.innerHTML = '';
-            }
             return;
         }
 
         if (this.telemetryHud) this.telemetryHud.style.display = 'block';
-
-        if (this.telemetryDebugEnabled && this.telemetryStatus) {
-            const source = this.currentTelemetry.source ? ` (${this.currentTelemetry.source})` : '';
-            this.telemetryStatus.textContent = `Telemetry: detected${source}`;
-        }
         this.updateTelemetryDisplay(0);
     }
 
@@ -1720,29 +1556,7 @@ class TeslaCamPlayer {
             }
         }
 
-        // Debug pills panel
-        if (!this.telemetryPanel || !this.telemetryValues) return;
-
-        // Pick a small set of keys to render (prefer common ones)
-        const preferred = ['speed_kmh', 'vehicle_speed_mps', 'gear_state', 'autopilot_state', 'brake_applied', 'blinker_on_left', 'blinker_on_right', 'heading_deg', 'lat', 'lon', 'steering_wheel_angle', 'accelerator_pedal_position'];
-        const keys = [];
-        preferred.forEach(k => { if (k in point.data) keys.push(k); });
-        if (keys.length < 6) {
-            for (const k of Object.keys(point.data)) {
-                if (keys.includes(k)) continue;
-                if (keys.length >= 6) break;
-                if (typeof point.data[k] === 'object') continue;
-                keys.push(k);
-            }
-        }
-
-        this.telemetryValues.innerHTML = '';
-        keys.forEach(k => {
-            const pill = document.createElement('span');
-            pill.className = 'telemetry-pill';
-            pill.innerHTML = `<span class="k">${this.escapeHtml(k)}</span><span class="v">${this.escapeHtml(String(point.data[k]))}</span>`;
-            this.telemetryValues.appendChild(pill);
-        });
+        // Debug pills panel removed for production
     }
 
     getTelemetryAtTime(points, t) {
@@ -3692,78 +3506,26 @@ class TeslaCamPlayer {
     
     // Progress Management Methods
     showProgress(title, status = 'Initializing...') {
-        console.log('showProgress called:', title, status);
-        console.trace('showProgress stack trace:'); // This will show the call stack
-        
         // Hide any existing download overlay
         if (this.downloadOverlay) {
             this.downloadOverlay.style.display = 'none';
         }
-        
-        console.log('Progress elements:', {
-            overlay: this.progressOverlay,
-            title: this.progressTitle,
-            status: this.progressStatus,
-            fill: this.progressFill,
-            text: this.progressText
-        });
-        
+
         if (!this.progressOverlay || !this.progressTitle || !this.progressStatus || !this.progressFill || !this.progressText) {
-            console.error('Progress elements not found!');
+            this.logError('Progress elements not found');
             return;
         }
-        
+
         this.progressTitle.textContent = title;
         this.progressStatus.textContent = status;
         this.progressFill.style.width = '0%';
         this.progressText.textContent = '0%';
-        
+
         this.progressOverlay.style.display = 'flex';
-        console.log('Progress overlay shown');
-        
-        // Debug: Check computed styles
-        const computedStyle = window.getComputedStyle(this.progressOverlay);
-        console.log('Progress overlay computed styles:', {
-            display: computedStyle.display,
-            position: computedStyle.position,
-            zIndex: computedStyle.zIndex,
-            visibility: computedStyle.visibility,
-            opacity: computedStyle.opacity,
-            width: computedStyle.width,
-            height: computedStyle.height
-        });
-        
-        // Force visibility
         this.progressOverlay.style.visibility = 'visible';
         this.progressOverlay.style.opacity = '1';
         this.progressOverlay.style.zIndex = '9999';
-        
-        // Debug: Check if content is visible
-        const panel = this.progressOverlay.querySelector('.progress-panel');
-        const titleElement = this.progressOverlay.querySelector('#progressTitle');
-        const bar = this.progressOverlay.querySelector('#progressBar');
-        const fill = this.progressOverlay.querySelector('#progressFill');
-        
-        console.log('Progress content elements:', {
-            panel: panel,
-            title: titleElement,
-            bar: bar,
-            fill: fill
-        });
-        
-        if (panel) {
-            const panelStyle = window.getComputedStyle(panel);
-            console.log('Panel computed styles:', {
-                display: panelStyle.display,
-                visibility: panelStyle.visibility,
-                opacity: panelStyle.opacity,
-                background: panelStyle.background,
-                width: panelStyle.width,
-                height: panelStyle.height
-            });
-        }
-        
-
+        this.progressOverlay.style.pointerEvents = 'auto';
     }
     
     updateProgress(percentage, status) {
