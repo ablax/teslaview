@@ -38,6 +38,13 @@ The application is deployed and ready to use! Simply visit the link above to sta
 - **MP4 export** - Download clips in high-quality MP4 format
 - **Clip selection mode** - Easily select multiple clips for combining
 
+### Tesla Dashcam Telemetry HUD (newer vehicles)
+- **Auto-detects Tesla dashcam telemetry** embedded in H.264 SEI (`user_data_unregistered`) when present
+- **Live HUD during playback** (speed in **km/h**, gear, blinkers, throttle %, brake, steering angle)
+- **Blinkers blink** like the in-car display
+- **HUD burn-in during export** - Spliced/combined downloads automatically include the HUD when telemetry exists for the event
+- **No uploads** - Telemetry is decoded locally in your browser
+
 ### Event Combination System
 - **Multi-event selection** - Select multiple events to combine into longer videos
 - **Intuitive checkbox dropdown** - Modern dropdown interface for easy event selection
@@ -99,11 +106,12 @@ npm run dev
 ```
 
 ### Production Mode
-Toggle console logging by changing `this.isProduction` in the constructor:
+`public/js/app.js` defaults to production-safe logging (`this.isProduction = true`).
+
+If you need verbose console logs while developing, set:
 ```javascript
 // In public/js/app.js constructor
 this.isProduction = false; // Development mode - shows console logs
-this.isProduction = true;  // Production mode - hides console logs
 ```
 
 ## Usage
@@ -138,6 +146,9 @@ this.isProduction = true;  // Production mode - hides console logs
 - **Timeline scrubbing** - Drag the timeline slider to jump to specific times
 - **Event navigation** - Use Previous/Next buttons or the event dropdown
 - **Jump to event** - For Sentry Mode events, jump to the critical moment
+- **Telemetry HUD (if available)**:
+  - In **grid view**, the HUD is docked above the grid (so it doesn't cover any camera)
+  - In **enlarged view**, the HUD overlays the video (Tesla-style)
 
 ### Video Splicing & Editing
 
@@ -235,6 +246,10 @@ tesla-cam-player/
 
 **Note:** H.265/HEVC videos (common in newer Tesla models) work best in Safari or Firefox browsers.
 
+### Telemetry Support Notes
+- Telemetry HUD support is designed for **Tesla dashcam clips that carry telemetry inside the video bitstream** (H.264 SEI `user_data_unregistered`).
+- If Tesla changes the format or if your clips don’t include SEI telemetry, the HUD simply won’t appear (exports will still work).
+
 ## Browser Compatibility
 
 - **Safari** - Best support for H.265 videos, video recording, and PWA features
@@ -295,6 +310,7 @@ Videos are automatically grouped into events based on:
 - **Smart naming** - Clear file names with clip info
 - **Individual cameras** - Download specific camera feeds
 - **Combined videos** - Download merged clips as single files
+- **Telemetry HUD burn-in (if available)** - Exported clips include the telemetry HUD automatically
 - **WebCodecs optimization** - Hardware-accelerated processing when available
 - **Progress feedback** - Visual progress during download operations
 
@@ -364,7 +380,6 @@ Videos are automatically grouped into events based on:
 ### Progress bar issues
 - **Progress bar not showing**: Check if operation is actually running
 - **Progress stuck**: Try refreshing the page and retry the operation
-- **Progress bar not hiding**: Use browser console to run `forceHideProgress()`
 - **Black overlay**: Progress overlay should hide automatically on completion
 
 ### Offline Mode Issues
