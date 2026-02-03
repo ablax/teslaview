@@ -1,6 +1,6 @@
-const CACHE_NAME = 'tesla-cam-player-v1.0.5';
-const STATIC_CACHE = 'tesla-cam-static-v1.0.5';
-const DYNAMIC_CACHE = 'tesla-cam-dynamic-v1.0.5';
+const CACHE_NAME = 'tesla-cam-player-v1.0.6';
+const STATIC_CACHE = 'tesla-cam-static-v1.0.6';
+const DYNAMIC_CACHE = 'tesla-cam-dynamic-v1.0.6';
 
 // Files to cache immediately
 const STATIC_FILES = [
@@ -8,7 +8,6 @@ const STATIC_FILES = [
   '/index.html',
   '/css/styles.css',
   '/css/telemetry.css',
-  '/vendor/mp4box.all.umd.js?v=063',
   '/js/app.js',
   '/manifest.json',
   '/icons/icon-512x512.png',

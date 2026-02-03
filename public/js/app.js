@@ -1250,132 +1250,120 @@ class TeslaCamPlayer {
     }
 
     async parseMp4Telemetry(file) {
-        // MP4Box must be loaded via vendor script
-        if (typeof MP4Box === 'undefined' || !file) return null;
+        // We avoid depending on mp4box.js bundling (recent builds are ESM-only and break in classic <script>).
+        // Instead, do a best-effort scan of the MP4's 'mdat' box and parse H.264 NAL units like TeslaCamBurner.
+        if (!file) return null;
 
-        return await new Promise(async (resolve) => {
-            let resolved = false;
-            const finalize = (telemetry) => {
-                if (resolved) return;
-                resolved = true;
-                resolve(telemetry);
-            };
+        const telemetry = await this.parseTeslaTelemetryFromMdat(file);
+        return telemetry;
+    }
 
-            try {
-                const mp4boxfile = MP4Box.createFile();
-                const trackTimescales = new Map();
-                const trackTypes = new Map();
-                const points = [];
+    async parseTeslaTelemetryFromMdat(file) {
+        try {
+            const buf = await file.arrayBuffer();
+            const u8 = new Uint8Array(buf);
+            const dv = new DataView(buf);
 
-                let idleTimer = null;
-                const armIdleFinalize = () => {
-                    if (idleTimer) clearTimeout(idleTimer);
-                    idleTimer = setTimeout(() => {
-                        if (!points.length) return finalize(null);
-                        points.sort((a, b) => a.t - b.t);
-                        const keys = this.collectTelemetryKeys(points);
-                        finalize({ points, keys, source: 'embedded-mp4' });
-                    }, 400);
-                };
+            // Find first 'mdat' box (simple MP4 atom scan)
+            let pos = 0;
+            let mdatStart = -1;
+            let mdatEnd = -1;
 
-                mp4boxfile.onReady = (info) => {
-                    try {
-                        const tracks = (info.tracks || []);
+            while (pos + 8 <= u8.length) {
+                const size = dv.getUint32(pos, false);
+                const type = String.fromCharCode(u8[pos + 4], u8[pos + 5], u8[pos + 6], u8[pos + 7]);
+                let boxSize = size;
+                let headerSize = 8;
 
-                        // 1) Timed-metadata style tracks (text/JSON)
-                        const metaTracks = tracks.filter(t => {
-                            const codec = (t.codec || '').toLowerCase();
-                            const type = (t.type || '').toLowerCase();
-                            return type.includes('meta') || type.includes('subtitle') ||
-                                codec.includes('mett') || codec.includes('metx') || codec.includes('wvtt') || codec.includes('stpp');
-                        });
+                if (boxSize === 1) {
+                    // 64-bit size
+                    if (pos + 16 > u8.length) break;
+                    const hi = dv.getUint32(pos + 8, false);
+                    const lo = dv.getUint32(pos + 12, false);
+                    boxSize = hi * 2 ** 32 + lo;
+                    headerSize = 16;
+                } else if (boxSize === 0) {
+                    boxSize = u8.length - pos;
+                }
 
-                        // 2) Video track SEI (observed in provided Tesla sample)
-                        const videoTracks = tracks.filter(t => (t.type || '').toLowerCase() === 'video');
+                if (boxSize <= headerSize) break;
 
-                        [...metaTracks, ...videoTracks].forEach(t => {
-                            trackTimescales.set(t.id, t.timescale || info.timescale || 1);
-                            trackTypes.set(t.id, (t.type || '').toLowerCase());
-                            // Keep this modest; for long clips we still get many samples.
-                            mp4boxfile.setExtractionOptions(t.id, null, { nbSamples: 5000 });
-                        });
+                if (type === 'mdat') {
+                    mdatStart = pos + headerSize;
+                    mdatEnd = Math.min(u8.length, pos + boxSize);
+                    break;
+                }
 
-                        if (metaTracks.length === 0 && videoTracks.length === 0) {
-                            return finalize(null);
-                        }
-
-                        mp4boxfile.start();
-                    } catch (e) {
-                        finalize(null);
-                    }
-                };
-
-                mp4boxfile.onSamples = (trackId, _user, samples) => {
-                    try {
-                        const timescale = trackTimescales.get(trackId) || 1;
-                        for (const s of samples) {
-                            const t = (s.cts ?? s.dts ?? 0) / timescale;
-                            if (!s.data) continue;
-
-                            const trackType = trackTypes.get(trackId) || '';
-
-                            // Case A: H.264 SEI telemetry embedded in *video* samples
-                            if (trackType === 'video') {
-                                const sampleU8 = (s.data instanceof Uint8Array) ? s.data : new Uint8Array(s.data);
-                                const seiUsers = this.decodeH264SeiUserDataUnregisteredFromAvcSample(sampleU8);
-                                for (const userBytes of seiUsers) {
-                                    const decoded = this.getTeslaTelemetryFromSeiUserData(userBytes);
-                                    if (decoded) {
-                                        points.push({ t, data: decoded });
-                                    }
-                                }
-                                continue;
-                            }
-
-                            // Case B: timed-metadata samples where the sample payload is text/JSON
-                            let text = null;
-                            try {
-                                text = new TextDecoder('utf-8', { fatal: false }).decode(s.data);
-                            } catch {
-                                text = null;
-                            }
-                            if (!text) continue;
-
-                            const trimmed = text.trim();
-                            if (!trimmed) continue;
-
-                            let data = null;
-                            try {
-                                data = JSON.parse(trimmed);
-                            } catch {
-                                // As a fallback, allow key=value;key=value
-                                if (trimmed.includes('=') && trimmed.includes(';')) {
-                                    data = Object.fromEntries(trimmed.split(';').map(kv => kv.split('=').map(x => x.trim())).filter(x => x.length === 2));
-                                }
-                            }
-
-                            if (data && typeof data === 'object') {
-                                points.push({ t, data });
-                            }
-                        }
-                        armIdleFinalize();
-                    } catch {
-                        // ignore
-                    }
-                };
-
-                const buffer = await file.arrayBuffer();
-                buffer.fileStart = 0;
-                mp4boxfile.appendBuffer(buffer);
-                mp4boxfile.flush();
-
-                // In case there are no samples events
-                setTimeout(() => finalize(points.length ? { points: points.sort((a, b) => a.t - b.t), keys: this.collectTelemetryKeys(points), source: 'embedded-mp4' } : null), 800);
-
-            } catch (e) {
-                finalize(null);
+                pos += boxSize;
             }
-        });
+
+            if (mdatStart < 0 || mdatEnd <= mdatStart) return null;
+
+            // Scan NAL units inside mdat: [uint32 nalSize][nalBytes...]
+            // TeslaCamBurner associates SEI (type 6) metadata with the *next* slice (type 1 or 5).
+            let i = mdatStart;
+            let pending = null;
+            let frameIndex = 0;
+            const points = [];
+
+            while (i + 4 <= mdatEnd) {
+                const nalSize = dv.getUint32(i, false);
+                i += 4;
+                if (nalSize < 2 || i + nalSize > mdatEnd) {
+                    // skip invalid
+                    i += Math.max(0, nalSize);
+                    continue;
+                }
+
+                const nal = u8.subarray(i, i + nalSize);
+                i += nalSize;
+
+                const nalType = nal[0] & 0x1f;
+
+                if (nalType === 6) {
+                    // SEI. We only care about user_data_unregistered. TeslaCamBurner checks nal[1] == 5.
+                    if (nal.length > 2 && nal[1] === 5) {
+                        // Try to parse user_data_unregistered payload(s)
+                        // Wrap as AVC sample with a single NAL for reuse of existing parser:
+                        const sample = new Uint8Array(4 + nal.length);
+                        sample[0] = (nal.length >>> 24) & 0xff;
+                        sample[1] = (nal.length >>> 16) & 0xff;
+                        sample[2] = (nal.length >>> 8) & 0xff;
+                        sample[3] = nal.length & 0xff;
+                        sample.set(nal, 4);
+
+                        const seiUsers = this.decodeH264SeiUserDataUnregisteredFromAvcSample(sample);
+                        for (const userBytes of seiUsers) {
+                            const decoded = this.getTeslaTelemetryFromSeiUserData(userBytes);
+                            if (decoded) {
+                                pending = decoded;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                if (nalType === 1 || nalType === 5) {
+                    // Non-IDR/IDR slice: new frame/sample boundary
+                    if (pending) {
+                        // Map to time using a default FPS (best-effort). We'll treat FPS as ~36 to match Tesla sample.
+                        const fps = 36;
+                        const t = frameIndex / fps;
+                        points.push({ t, data: pending });
+                        pending = null;
+                    }
+                    frameIndex++;
+                }
+            }
+
+            if (!points.length) return null;
+            points.sort((a, b) => a.t - b.t);
+            return { points, keys: this.collectTelemetryKeys(points), source: 'mdat-scan' };
+
+        } catch (e) {
+            this.log('parseTeslaTelemetryFromMdat failed:', e?.message);
+            return null;
+        }
     }
 
     refreshTelemetryPanel() {
