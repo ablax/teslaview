@@ -45,6 +45,43 @@ class TeslaCamPlayer {
         }, 450);
     }
 
+    ensureTelemetryHud() {
+        try {
+            if (!this.videoGrid) return;
+            if (document.getElementById('telemetryHud')) return;
+
+            const hud = document.createElement('div');
+            hud.className = 'telemetry-hud';
+            hud.id = 'telemetryHud';
+            hud.style.display = 'none';
+
+            hud.innerHTML = `
+                <div class="telemetry-hud-bar">
+                    <div class="telemetry-hud-side telemetry-hud-side-left"></div>
+                    <div class="telemetry-hud-center">
+                        <div class="telemetry-hud-gear" id="telemetryHudGear">DRIVE</div>
+                        <div class="telemetry-hud-speed">
+                            <span class="telemetry-hud-speed-value" id="telemetryHudSpeed">0</span>
+                            <div class="telemetry-hud-speed-unit" id="telemetryHudUnit">KM/H</div>
+                        </div>
+                        <div class="telemetry-hud-sub" id="telemetryHudSub">Manual</div>
+                    </div>
+                    <div class="telemetry-hud-side telemetry-hud-side-right">
+                        <span class="telemetry-hud-indicator blink-dim" id="telemetryHudBlinkers">◁ ▷</span>
+                        <span class="telemetry-hud-metric" id="telemetryHudBrake">—</span>
+                        <span class="telemetry-hud-metric" id="telemetryHudThrottle">THR —%</span>
+                        <span class="telemetry-hud-metric" id="telemetryHudSteering">STEER —°</span>
+                    </div>
+                </div>
+            `;
+
+            // Put it at the top of the grid so it overlays all videos
+            this.videoGrid.prepend(hud);
+        } catch {
+            // ignore
+        }
+    }
+
     initializeElements() {
         // File selection elements
         this.fileInput = document.getElementById('fileInput');
@@ -67,6 +104,7 @@ class TeslaCamPlayer {
         this.videoGrid = document.getElementById('videoGrid');
 
         // Telemetry HUD + debug panel
+        this.ensureTelemetryHud();
         this.telemetryHud = document.getElementById('telemetryHud');
         this.telemetryHudGear = document.getElementById('telemetryHudGear');
         this.telemetryHudSpeed = document.getElementById('telemetryHudSpeed');
