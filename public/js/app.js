@@ -1184,7 +1184,10 @@ class TeslaCamPlayer {
         const out = [];
         if (!sampleU8 || sampleU8.byteLength < 8) return out;
 
-        const UUID = new Uint8Array([0x42,0x42,0x42,0x69,0x08,0x01,0x10,0x01,0x18,0xdf,0xe6,0x10,0x25,0x93,0x3e,0xa9]);
+        // TeslaCam SEI payload marker:
+        // Some implementations treat it like a UUID (16 bytes), but TeslaCamBurner only checks for a 0x42*...0x69 prefix.
+        const UUID16 = new Uint8Array([0x42,0x42,0x42,0x69,0x08,0x01,0x10,0x01,0x18,0xdf,0xe6,0x10,0x25,0x93,0x3e,0xa9]);
+        const UUID_PREFIX = 0x69; // after one or more 0x42 bytes
 
         // AVC samples are length-prefixed NAL units (typically 4-byte lengths)
         let off = 0;
@@ -1231,13 +1234,35 @@ class TeslaCamPlayer {
                 idx += payloadSize;
 
                 // user_data_unregistered
-                if (payloadType === 5 && payload.length >= 16) {
-                    let match = true;
-                    for (let i = 0; i < 16; i++) {
-                        if (payload[i] !== UUID[i]) { match = false; break; }
+                if (payloadType === 5 && payload.length >= 4) {
+                    // Case A: full 16-byte UUID prefix (common)
+                    let match16 = payload.length >= 16;
+                    if (match16) {
+                        for (let i = 0; i < 16; i++) {
+                            if (payload[i] !== UUID16[i]) { match16 = false; break; }
+                        }
                     }
-                    if (match) {
+                    if (match16) {
                         out.push(new Uint8Array(payload.slice(16)));
+                        continue;
+                    }
+
+                    // Case B: TeslaCamBurner-style prefix: 0x42 0x42 0x42 0x69 (one or more 0x42 then 0x69)
+                    // Find the first non-0x42 byte; if it's 0x69, strip through it.
+                    let j = 0;
+                    while (j < payload.length && payload[j] === 0x42) j++;
+                    if (j > 0 && j < payload.length && payload[j] === UUID_PREFIX) {
+                        // protobuf starts immediately after 0x69
+                        out.push(new Uint8Array(payload.slice(j + 1)));
+                        continue;
+                    }
+
+                    // Case C: search within payload for the pattern 0x42 0x42 0x42 0x69
+                    for (let k = 0; k + 3 < payload.length; k++) {
+                        if (payload[k] === 0x42 && payload[k + 1] === 0x42 && payload[k + 2] === 0x42 && payload[k + 3] === 0x69) {
+                            out.push(new Uint8Array(payload.slice(k + 4)));
+                            break;
+                        }
                     }
                 }
 
