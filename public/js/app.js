@@ -70,20 +70,25 @@ class TeslaCamPlayer {
                 return;
             }
 
-            // Prefer Front tile
-            const front = this.videoGrid?.querySelector('.video-item[data-camera="Front"]');
-            if (front) {
-                front.appendChild(this.telemetryHud);
-                this.telemetryHud.classList.add('compact');
+            // In grid view, do NOT overlay any video. Dock the HUD above the grid.
+            const container = document.getElementById('videoContainer');
+            if (container) {
+                // Place it right before the grid if possible
+                const grid = this.videoGrid;
+                if (grid && grid.parentNode === container) {
+                    container.insertBefore(this.telemetryHud, grid);
+                } else {
+                    container.prepend(this.telemetryHud);
+                }
+                this.telemetryHud.classList.add('docked');
+                this.telemetryHud.classList.remove('compact');
                 return;
             }
 
-            // Fallback to first tile
-            const first = this.videoGrid?.querySelector('.video-item');
-            if (first) {
-                first.appendChild(this.telemetryHud);
-                this.telemetryHud.classList.add('compact');
-            }
+            // Fallback: attach to grid container (still docked style)
+            this.videoGrid?.prepend(this.telemetryHud);
+            this.telemetryHud.classList.add('docked');
+            this.telemetryHud.classList.remove('compact');
         } catch {
             // ignore
         }

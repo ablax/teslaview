@@ -16,39 +16,24 @@
     top: 8px;
 }
 
-/* Compact mode for multi-camera grid (smaller, less intrusive) */
-.telemetry-hud.compact {
-    left: 8px;
+/* Docked mode (grid view): show HUD above the grid, not on top of any video */
+.telemetry-hud.docked {
+    position: relative;
+    left: auto;
     right: auto;
-    width: auto;
+    top: auto;
+    transform: none;
+    margin: 0 0 12px;
 }
 
-.telemetry-hud.compact .telemetry-hud-bar {
-    justify-content: flex-start;
-    gap: 10px;
+.telemetry-hud.docked .telemetry-hud-bar {
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 10px;
+    padding: 10px 14px;
 }
 
-.telemetry-hud.compact .telemetry-hud-side-left,
-.telemetry-hud.compact .telemetry-hud-side-right {
-    display: none;
-}
-
-.telemetry-hud.compact .telemetry-hud-gear {
-    font-size: 12px;
-    letter-spacing: 0.12em;
-}
-
-.telemetry-hud.compact .telemetry-hud-speed-value {
-    font-size: 30px;
-}
-
-.telemetry-hud.compact .telemetry-hud-speed-unit {
-    font-size: 10px;
-}
-
-.telemetry-hud.compact .telemetry-hud-sub {
-    font-size: 11px;
-    margin-top: 2px;
+.telemetry-hud.docked, .telemetry-hud.docked * {
+    text-shadow: none;
 }
 
 .telemetry-hud-bar {
