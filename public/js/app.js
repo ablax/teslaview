@@ -1279,37 +1279,79 @@ class TeslaCamPlayer {
             const u8 = new Uint8Array(buf);
             const dv = new DataView(buf);
 
-            // Find first 'mdat' box (simple MP4 atom scan)
+            // Find first 'mdat' box.
+            // Use BigInt for 64-bit sizes to avoid precision bugs on large files.
             let pos = 0;
             let mdatStart = -1;
             let mdatEnd = -1;
 
-            while (pos + 8 <= u8.length) {
-                const size = dv.getUint32(pos, false);
-                const type = String.fromCharCode(u8[pos + 4], u8[pos + 5], u8[pos + 6], u8[pos + 7]);
-                let boxSize = size;
-                let headerSize = 8;
+            const readType = (p) => String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]);
+            const readU32 = (p) => dv.getUint32(p, false);
+            const readU64 = (p) => {
+                // DataView.getBigUint64 may not exist in older browsers; fall back.
+                if (typeof dv.getBigUint64 === 'function') return dv.getBigUint64(p, false);
+                const hi = BigInt(dv.getUint32(p, false));
+                const lo = BigInt(dv.getUint32(p + 4, false));
+                return (hi << 32n) | lo;
+            };
 
-                if (boxSize === 1) {
-                    // 64-bit size
+            while (pos + 8 <= u8.length) {
+                const size32 = readU32(pos);
+                const type = readType(pos);
+                let headerSize = 8;
+                let boxSizeBig = BigInt(size32);
+
+                if (size32 === 1) {
                     if (pos + 16 > u8.length) break;
-                    const hi = dv.getUint32(pos + 8, false);
-                    const lo = dv.getUint32(pos + 12, false);
-                    boxSize = hi * 2 ** 32 + lo;
+                    boxSizeBig = readU64(pos + 8);
                     headerSize = 16;
-                } else if (boxSize === 0) {
-                    boxSize = u8.length - pos;
+                } else if (size32 === 0) {
+                    boxSizeBig = BigInt(u8.length - pos);
                 }
 
-                if (boxSize <= headerSize) break;
+                if (boxSizeBig <= BigInt(headerSize)) break;
+
+                const boxSizeNum = boxSizeBig > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(boxSizeBig);
 
                 if (type === 'mdat') {
                     mdatStart = pos + headerSize;
-                    mdatEnd = Math.min(u8.length, pos + boxSize);
+                    // Clamp end
+                    const end = (boxSizeBig > BigInt(u8.length - pos)) ? u8.length : (pos + Number(boxSizeBig));
+                    mdatEnd = Math.min(u8.length, end);
                     break;
                 }
 
-                pos += boxSize;
+                // Advance safely; if box is insane, abort.
+                if (boxSizeNum <= headerSize || pos + boxSizeNum <= pos) break;
+                pos += boxSizeNum;
+            }
+
+            // Fallback: raw scan for 'mdat' marker if structured parse fails.
+            if (mdatStart < 0 || mdatEnd <= mdatStart) {
+                const needle = [0x6d, 0x64, 0x61, 0x74]; // 'mdat'
+                let found = -1;
+                // Search in the first ~2MB of header region, where boxes usually live.
+                const limit = Math.min(u8.length - 4, 2 * 1024 * 1024);
+                for (let p = 4; p < limit; p++) {
+                    if (u8[p] === needle[0] && u8[p + 1] === needle[1] && u8[p + 2] === needle[2] && u8[p + 3] === needle[3]) {
+                        found = p - 4; // size field starts 4 bytes before type
+                        break;
+                    }
+                }
+                if (found >= 0 && found + 8 <= u8.length) {
+                    const size32 = readU32(found);
+                    let headerSize = 8;
+                    let boxSizeBig = BigInt(size32);
+                    if (size32 === 1 && found + 16 <= u8.length) {
+                        boxSizeBig = readU64(found + 8);
+                        headerSize = 16;
+                    } else if (size32 === 0) {
+                        boxSizeBig = BigInt(u8.length - found);
+                    }
+                    mdatStart = found + headerSize;
+                    const end = (boxSizeBig > BigInt(u8.length - found)) ? u8.length : (found + Number(boxSizeBig));
+                    mdatEnd = Math.min(u8.length, end);
+                }
             }
 
             if (mdatStart < 0 || mdatEnd <= mdatStart) {
