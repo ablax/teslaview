@@ -9,6 +9,13 @@
     pointer-events: none;
 }
 
+/* When embedded inside a single video tile, keep it neatly contained */
+.video-item .telemetry-hud {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+}
+
 .telemetry-hud-bar {
     display: flex;
     align-items: center;

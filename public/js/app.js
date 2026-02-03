@@ -45,10 +45,54 @@ class TeslaCamPlayer {
         }, 450);
     }
 
+    refreshTelemetryHudRefs() {
+        this.telemetryHud = document.getElementById('telemetryHud');
+        this.telemetryHudGear = document.getElementById('telemetryHudGear');
+        this.telemetryHudSpeed = document.getElementById('telemetryHudSpeed');
+        this.telemetryHudUnit = document.getElementById('telemetryHudUnit');
+        this.telemetryHudSub = document.getElementById('telemetryHudSub');
+        this.telemetryHudBlinkers = document.getElementById('telemetryHudBlinkers');
+        this.telemetryHudBrake = document.getElementById('telemetryHudBrake');
+        this.telemetryHudThrottle = document.getElementById('telemetryHudThrottle');
+        this.telemetryHudSteering = document.getElementById('telemetryHudSteering');
+    }
+
+    attachTelemetryHudToBestVideoItem() {
+        try {
+            if (!this.telemetryHud) this.refreshTelemetryHudRefs();
+            if (!this.telemetryHud) return;
+
+            // Prefer enlarged tile
+            const enlarged = this.videoGrid?.querySelector('.video-item.enlarged');
+            if (enlarged) {
+                enlarged.appendChild(this.telemetryHud);
+                return;
+            }
+
+            // Prefer Front tile
+            const front = this.videoGrid?.querySelector('.video-item[data-camera="Front"]');
+            if (front) {
+                front.appendChild(this.telemetryHud);
+                return;
+            }
+
+            // Fallback to first tile
+            const first = this.videoGrid?.querySelector('.video-item');
+            if (first) {
+                first.appendChild(this.telemetryHud);
+            }
+        } catch {
+            // ignore
+        }
+    }
+
     ensureTelemetryHud() {
         try {
             if (!this.videoGrid) return;
-            if (document.getElementById('telemetryHud')) return;
+            if (document.getElementById('telemetryHud')) {
+                this.refreshTelemetryHudRefs();
+                return;
+            }
 
             const hud = document.createElement('div');
             hud.className = 'telemetry-hud';
@@ -75,8 +119,10 @@ class TeslaCamPlayer {
                 </div>
             `;
 
-            // Put it at the top of the grid so it overlays all videos
+            // Default placement: inside the Front tile (or first), so it doesn't float over the entire grid.
             this.videoGrid.prepend(hud);
+            this.refreshTelemetryHudRefs();
+            this.attachTelemetryHudToBestVideoItem();
         } catch {
             // ignore
         }
@@ -714,10 +760,9 @@ class TeslaCamPlayer {
 
     createVideoGrid() {
         // This gets called after selecting files and rebuilds the grid.
-        // Preserve/inject the telemetry HUD before adding video tiles.
         this.videoGrid.innerHTML = '';
         this.ensureTelemetryHud();
-        
+
         // Get all unique cameras from all videos, filtering out hidden files
         const allCameras = [...new Set(this.videos
             .filter(video => !video.name.startsWith('._')) // Filter out hidden files
@@ -766,6 +811,9 @@ class TeslaCamPlayer {
         });
         
         this.log(`Created ${allCameras.length} video slots for cameras:`, allCameras);
+
+        // After rebuilding, reattach HUD into a single tile (Front/enlarged) so it doesn't cover the whole grid.
+        this.attachTelemetryHudToBestVideoItem();
     }
 
     loadEvent(eventIndex) {
@@ -1615,6 +1663,8 @@ class TeslaCamPlayer {
         // HUD (overlay)
         if (this.telemetryHud) {
             this.telemetryHud.style.display = 'block';
+            // Ensure it's attached to the correct tile
+            this.attachTelemetryHudToBestVideoItem();
 
             // Gear
             const gear = point.data.gear_state;
@@ -1836,6 +1886,9 @@ class TeslaCamPlayer {
             if (downloadTrigger) {
                 downloadTrigger.style.display = 'none';
             }
+
+            // Move HUD back to Front/first tile
+            this.attachTelemetryHudToBestVideoItem();
         } else {
             // Enlarging - show download button
             videoItem.classList.add('enlarged');
@@ -1843,6 +1896,9 @@ class TeslaCamPlayer {
             if (downloadTrigger) {
                 downloadTrigger.style.display = 'block';
             }
+
+            // Move HUD into the enlarged tile
+            this.attachTelemetryHudToBestVideoItem();
         }
     }
 
