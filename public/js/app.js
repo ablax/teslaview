@@ -713,7 +713,10 @@ class TeslaCamPlayer {
     }
 
     createVideoGrid() {
+        // This gets called after selecting files and rebuilds the grid.
+        // Preserve/inject the telemetry HUD before adding video tiles.
         this.videoGrid.innerHTML = '';
+        this.ensureTelemetryHud();
         
         // Get all unique cameras from all videos, filtering out hidden files
         const allCameras = [...new Set(this.videos
