@@ -1372,23 +1372,24 @@ class TeslaCamPlayer {
                 const nalType = nal[0] & 0x1f;
 
                 if (nalType === 6) {
+                    // SEI can contain multiple payloads; user_data_unregistered is payloadType=5.
+                    // Do NOT assume anything about nal[1] (that's an implementation detail and often not 0x05).
                     stats.sei++;
-                    if (nal.length > 2 && nal[1] === 5) {
-                        const sample = new Uint8Array(4 + nal.length);
-                        sample[0] = (nal.length >>> 24) & 0xff;
-                        sample[1] = (nal.length >>> 16) & 0xff;
-                        sample[2] = (nal.length >>> 8) & 0xff;
-                        sample[3] = nal.length & 0xff;
-                        sample.set(nal, 4);
 
-                        const seiUsers = this.decodeH264SeiUserDataUnregisteredFromAvcSample(sample);
-                        stats.userData += seiUsers.length;
-                        for (const userBytes of seiUsers) {
-                            const decoded = this.getTeslaTelemetryFromSeiUserData(userBytes);
-                            if (decoded) {
-                                pending = decoded;
-                                stats.decoded++;
-                            }
+                    const sample = new Uint8Array(4 + nal.length);
+                    sample[0] = (nal.length >>> 24) & 0xff;
+                    sample[1] = (nal.length >>> 16) & 0xff;
+                    sample[2] = (nal.length >>> 8) & 0xff;
+                    sample[3] = nal.length & 0xff;
+                    sample.set(nal, 4);
+
+                    const seiUsers = this.decodeH264SeiUserDataUnregisteredFromAvcSample(sample);
+                    stats.userData += seiUsers.length;
+                    for (const userBytes of seiUsers) {
+                        const decoded = this.getTeslaTelemetryFromSeiUserData(userBytes);
+                        if (decoded) {
+                            pending = decoded;
+                            stats.decoded++;
                         }
                     }
                     return;
