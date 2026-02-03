@@ -16,6 +16,41 @@
     top: 8px;
 }
 
+/* Compact mode for multi-camera grid (smaller, less intrusive) */
+.telemetry-hud.compact {
+    left: 8px;
+    right: auto;
+    width: auto;
+}
+
+.telemetry-hud.compact .telemetry-hud-bar {
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+.telemetry-hud.compact .telemetry-hud-side-left,
+.telemetry-hud.compact .telemetry-hud-side-right {
+    display: none;
+}
+
+.telemetry-hud.compact .telemetry-hud-gear {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+}
+
+.telemetry-hud.compact .telemetry-hud-speed-value {
+    font-size: 30px;
+}
+
+.telemetry-hud.compact .telemetry-hud-speed-unit {
+    font-size: 10px;
+}
+
+.telemetry-hud.compact .telemetry-hud-sub {
+    font-size: 11px;
+    margin-top: 2px;
+}
+
 .telemetry-hud-bar {
     display: flex;
     align-items: center;

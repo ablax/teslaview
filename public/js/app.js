@@ -66,6 +66,7 @@ class TeslaCamPlayer {
             const enlarged = this.videoGrid?.querySelector('.video-item.enlarged');
             if (enlarged) {
                 enlarged.appendChild(this.telemetryHud);
+                this.telemetryHud.classList.remove('compact');
                 return;
             }
 
@@ -73,6 +74,7 @@ class TeslaCamPlayer {
             const front = this.videoGrid?.querySelector('.video-item[data-camera="Front"]');
             if (front) {
                 front.appendChild(this.telemetryHud);
+                this.telemetryHud.classList.add('compact');
                 return;
             }
 
@@ -80,6 +82,7 @@ class TeslaCamPlayer {
             const first = this.videoGrid?.querySelector('.video-item');
             if (first) {
                 first.appendChild(this.telemetryHud);
+                this.telemetryHud.classList.add('compact');
             }
         } catch {
             // ignore
