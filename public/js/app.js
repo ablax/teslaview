@@ -955,6 +955,110 @@ class TeslaCamPlayer {
         return Array.from(keys);
     }
 
+    // Tesla telemetry (observed in sample MP4): H.264 SEI user_data_unregistered messages
+    // with UUID: 42424269-0801-1001-18df-e61025933ea9
+    // Payload appears binary; we decode known offsets as a best-effort:
+    // - speed_mph: float32 little-endian @ offset 2
+    // - lat: float64 little-endian @ offset 12
+    // - lon: float64 little-endian @ offset 21
+    getTeslaTelemetryFromSeiUserData(userBytes) {
+        try {
+            const u8 = (userBytes instanceof Uint8Array) ? userBytes : new Uint8Array(userBytes);
+            const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+            const out = {};
+            if (u8.byteLength >= 6) {
+                const speed = dv.getFloat32(2, true);
+                if (Number.isFinite(speed) && speed >= 0 && speed <= 250) {
+                    out.speed_mph = Math.round(speed * 10) / 10;
+                }
+            }
+            if (u8.byteLength >= 20) {
+                const lat = dv.getFloat64(12, true);
+                if (Number.isFinite(lat) && lat >= -90 && lat <= 90) {
+                    out.lat = lat;
+                }
+            }
+            if (u8.byteLength >= 29) {
+                const lon = dv.getFloat64(21, true);
+                if (Number.isFinite(lon) && lon >= -180 && lon <= 180) {
+                    out.lon = lon;
+                }
+            }
+            return Object.keys(out).length ? out : null;
+        } catch {
+            return null;
+        }
+    }
+
+    decodeH264SeiUserDataUnregisteredFromAvcSample(sampleU8) {
+        const out = [];
+        if (!sampleU8 || sampleU8.byteLength < 8) return out;
+
+        const UUID = new Uint8Array([0x42,0x42,0x42,0x69,0x08,0x01,0x10,0x01,0x18,0xdf,0xe6,0x10,0x25,0x93,0x3e,0xa9]);
+
+        // AVC samples are length-prefixed NAL units (typically 4-byte lengths)
+        let off = 0;
+        const dv = new DataView(sampleU8.buffer, sampleU8.byteOffset, sampleU8.byteLength);
+        while (off + 4 <= sampleU8.byteLength) {
+            const nalLen = dv.getUint32(off, false);
+            off += 4;
+            if (nalLen <= 0 || off + nalLen > sampleU8.byteLength) break;
+            const nal = sampleU8.subarray(off, off + nalLen);
+            off += nalLen;
+            if (nal.length < 2) continue;
+            const nalType = nal[0] & 0x1f;
+            if (nalType !== 6) continue; // SEI
+
+            // Convert EBSP->RBSP (remove emulation prevention bytes)
+            const rbsp = [];
+            let zeros = 0;
+            for (let i = 1; i < nal.length; i++) {
+                const b = nal[i];
+                if (zeros === 2 && b === 0x03) {
+                    zeros = 0;
+                    continue;
+                }
+                rbsp.push(b);
+                zeros = (b === 0x00) ? zeros + 1 : 0;
+            }
+
+            let idx = 0;
+            while (idx < rbsp.length) {
+                // payloadType
+                let payloadType = 0;
+                while (idx < rbsp.length && rbsp[idx] === 0xff) { payloadType += 255; idx++; }
+                if (idx >= rbsp.length) break;
+                payloadType += rbsp[idx++];
+
+                // payloadSize
+                let payloadSize = 0;
+                while (idx < rbsp.length && rbsp[idx] === 0xff) { payloadSize += 255; idx++; }
+                if (idx >= rbsp.length) break;
+                payloadSize += rbsp[idx++];
+
+                if (idx + payloadSize > rbsp.length) break;
+                const payload = rbsp.slice(idx, idx + payloadSize);
+                idx += payloadSize;
+
+                // user_data_unregistered
+                if (payloadType === 5 && payload.length >= 16) {
+                    let match = true;
+                    for (let i = 0; i < 16; i++) {
+                        if (payload[i] !== UUID[i]) { match = false; break; }
+                    }
+                    if (match) {
+                        out.push(new Uint8Array(payload.slice(16)));
+                    }
+                }
+
+                // stop if rbsp trailing bits are reached (best-effort)
+                if (idx < rbsp.length && rbsp[idx] === 0x80) break;
+            }
+        }
+
+        return out;
+    }
+
     async parseMp4Telemetry(file) {
         // MP4Box must be loaded via vendor script
         if (typeof MP4Box === 'undefined' || !file) return null;
@@ -986,20 +1090,25 @@ class TeslaCamPlayer {
                 mp4boxfile.onReady = (info) => {
                     try {
                         const tracks = (info.tracks || []);
-                        // Heuristic: metadata/subtitle-ish tracks often carry telemetry as text or JSON
-                        const candidateTracks = tracks.filter(t => {
+
+                        // 1) Timed-metadata style tracks (text/JSON)
+                        const metaTracks = tracks.filter(t => {
                             const codec = (t.codec || '').toLowerCase();
                             const type = (t.type || '').toLowerCase();
                             return type.includes('meta') || type.includes('subtitle') ||
                                 codec.includes('mett') || codec.includes('metx') || codec.includes('wvtt') || codec.includes('stpp');
                         });
 
-                        candidateTracks.forEach(t => {
+                        // 2) Video track SEI (observed in provided Tesla sample)
+                        const videoTracks = tracks.filter(t => (t.type || '').toLowerCase() === 'video');
+
+                        [...metaTracks, ...videoTracks].forEach(t => {
                             trackTimescales.set(t.id, t.timescale || info.timescale || 1);
-                            mp4boxfile.setExtractionOptions(t.id, null, { nbSamples: 1000 });
+                            // Keep this modest; for long clips we still get many samples.
+                            mp4boxfile.setExtractionOptions(t.id, null, { nbSamples: 5000 });
                         });
 
-                        if (candidateTracks.length === 0) {
+                        if (metaTracks.length === 0 && videoTracks.length === 0) {
                             return finalize(null);
                         }
 
@@ -1016,7 +1125,19 @@ class TeslaCamPlayer {
                             const t = (s.cts ?? s.dts ?? 0) / timescale;
                             if (!s.data) continue;
 
-                            // Try to decode sample payload as UTF-8 text
+                            // Case A: H.264 SEI telemetry embedded in *video* samples
+                            if (s.is_sync !== undefined || s.size !== undefined) {
+                                const seiUsers = this.decodeH264SeiUserDataUnregisteredFromAvcSample(s.data);
+                                for (const userBytes of seiUsers) {
+                                    const decoded = this.getTeslaTelemetryFromSeiUserData(userBytes);
+                                    if (decoded) {
+                                        points.push({ t, data: decoded });
+                                    }
+                                }
+                                continue;
+                            }
+
+                            // Case B: timed-metadata samples where the sample payload is text/JSON
                             let text = null;
                             try {
                                 text = new TextDecoder('utf-8', { fatal: false }).decode(s.data);
