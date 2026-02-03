@@ -1397,7 +1397,14 @@ class TeslaCamPlayer {
             }
 
             if (!points.length) {
-                this.log('Telemetry not detected. Stats:', stats);
+                this.lastTelemetryScanStats = stats;
+                // Show something even in production mode (where console logs are disabled)
+                if (this.telemetryPanel && this.telemetryStatus) {
+                    this.telemetryPanel.style.display = 'flex';
+                    this.telemetryStatus.textContent = `Telemetry: not detected (mode=${stats.mode}, nal=${stats.nal}, sei=${stats.sei}, user=${stats.userData}, decoded=${stats.decoded})`;
+                }
+                // Always log a warning (even in production)
+                try { console.warn('Telemetry not detected. Stats:', stats); } catch {}
                 return null;
             }
             points.sort((a, b) => a.t - b.t);
@@ -3366,7 +3373,7 @@ class TeslaCamPlayer {
     // Helper method for conditional error logging
     logError(...args) {
         if (!this.isProduction) {
-            console.logError(...args);
+            console.error(...args);
         }
     }
     
