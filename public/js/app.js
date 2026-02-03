@@ -1690,11 +1690,13 @@ class TeslaCamPlayer {
         const steer = point.data.steering_wheel_angle;
 
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-        ctx.fillRect(hudX, hudY, hudW, barH);
-
+        // No background slab; use text shadow for readability.
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fff';
+        ctx.shadowColor = 'rgba(0,0,0,0.75)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 2;
 
         // Gear
         ctx.font = `${Math.max(14, Math.floor(barH * 0.22))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
@@ -1719,7 +1721,7 @@ class TeslaCamPlayer {
         // Extra row (blinkers / brake / thr / steer)
         ctx.font = `${Math.max(12, Math.floor(barH * 0.18))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
         ctx.textBaseline = 'alphabetic';
-        const extrasY = hudY + barH + Math.max(30, Math.floor(barH * 0.55));
+        const extrasY = hudY + barH + Math.max(22, Math.floor(barH * 0.42));
         const left = bl ? '◀' : '◁';
         const right = br ? '▶' : '▷';
         const blText = `${left} ${right}`;
