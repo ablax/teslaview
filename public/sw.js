@@ -1,12 +1,13 @@
-const CACHE_NAME = 'tesla-cam-player-v1.0.2';
-const STATIC_CACHE = 'tesla-cam-static-v1.0.2';
-const DYNAMIC_CACHE = 'tesla-cam-dynamic-v1.0.2';
+const CACHE_NAME = 'tesla-cam-player-v1.0.6';
+const STATIC_CACHE = 'tesla-cam-static-v1.0.6';
+const DYNAMIC_CACHE = 'tesla-cam-dynamic-v1.0.6';
 
 // Files to cache immediately
 const STATIC_FILES = [
   '/',
   '/index.html',
   '/css/styles.css',
+  '/css/telemetry.css',
   '/js/app.js',
   '/manifest.json',
   '/icons/icon-512x512.png',

@@ -9,7 +9,12 @@ class TeslaCamPlayer {
         this.isPlaying = false;
         this.currentSpeed = 1;
         this.objectUrls = [];
-        
+
+        // Telemetry (newer TeslaCam videos may contain a timed metadata track)
+        this.telemetryEnabled = true;
+        this.telemetryByEventIndex = new Map(); // eventIndex -> { points: [{t,data}], keys: [] }
+        this.currentTelemetry = null;
+
         // Splicing state
         this.spliceStartTime = null;
         this.spliceEndTime = null;
@@ -24,6 +29,111 @@ class TeslaCamPlayer {
         
         this.initializeElements();
         this.bindEvents();
+
+        // Blinker animation timer
+        this._blinkPhaseOn = false;
+        setInterval(() => {
+            if (!this.telemetryHudBlinkers) return;
+            const any = this._blinkLeftActive || this._blinkRightActive;
+            if (!any) {
+                this.telemetryHudBlinkers.classList.remove('blink-on');
+                this._blinkPhaseOn = false;
+                return;
+            }
+            this._blinkPhaseOn = !this._blinkPhaseOn;
+            this.telemetryHudBlinkers.classList.toggle('blink-on', this._blinkPhaseOn);
+        }, 450);
+    }
+
+    refreshTelemetryHudRefs() {
+        this.telemetryHud = document.getElementById('telemetryHud');
+        this.telemetryHudGear = document.getElementById('telemetryHudGear');
+        this.telemetryHudSpeed = document.getElementById('telemetryHudSpeed');
+        this.telemetryHudUnit = document.getElementById('telemetryHudUnit');
+        this.telemetryHudSub = document.getElementById('telemetryHudSub');
+        this.telemetryHudBlinkers = document.getElementById('telemetryHudBlinkers');
+        this.telemetryHudBrake = document.getElementById('telemetryHudBrake');
+        this.telemetryHudThrottle = document.getElementById('telemetryHudThrottle');
+        this.telemetryHudSteering = document.getElementById('telemetryHudSteering');
+    }
+
+    attachTelemetryHudToBestVideoItem() {
+        try {
+            if (!this.telemetryHud) this.refreshTelemetryHudRefs();
+            if (!this.telemetryHud) return;
+
+            // Prefer enlarged tile
+            const enlarged = this.videoGrid?.querySelector('.video-item.enlarged');
+            if (enlarged) {
+                enlarged.appendChild(this.telemetryHud);
+                this.telemetryHud.classList.remove('compact');
+                return;
+            }
+
+            // In grid view, do NOT overlay any video. Dock the HUD above the grid.
+            const container = document.getElementById('videoContainer');
+            if (container) {
+                // Place it right before the grid if possible
+                const grid = this.videoGrid;
+                if (grid && grid.parentNode === container) {
+                    container.insertBefore(this.telemetryHud, grid);
+                } else {
+                    container.prepend(this.telemetryHud);
+                }
+                this.telemetryHud.classList.add('docked');
+                this.telemetryHud.classList.remove('compact');
+                return;
+            }
+
+            // Fallback: attach to grid container (still docked style)
+            this.videoGrid?.prepend(this.telemetryHud);
+            this.telemetryHud.classList.add('docked');
+            this.telemetryHud.classList.remove('compact');
+        } catch {
+            // ignore
+        }
+    }
+
+    ensureTelemetryHud() {
+        try {
+            if (!this.videoGrid) return;
+            if (document.getElementById('telemetryHud')) {
+                this.refreshTelemetryHudRefs();
+                return;
+            }
+
+            const hud = document.createElement('div');
+            hud.className = 'telemetry-hud';
+            hud.id = 'telemetryHud';
+            hud.style.display = 'none';
+
+            hud.innerHTML = `
+                <div class="telemetry-hud-bar">
+                    <div class="telemetry-hud-side telemetry-hud-side-left"></div>
+                    <div class="telemetry-hud-center">
+                        <div class="telemetry-hud-gear" id="telemetryHudGear">DRIVE</div>
+                        <div class="telemetry-hud-speed">
+                            <span class="telemetry-hud-speed-value" id="telemetryHudSpeed">0</span>
+                            <div class="telemetry-hud-speed-unit" id="telemetryHudUnit">KM/H</div>
+                        </div>
+                        <div class="telemetry-hud-sub" id="telemetryHudSub">Manual</div>
+                    </div>
+                    <div class="telemetry-hud-side telemetry-hud-side-right">
+                        <span class="telemetry-hud-indicator blink-dim" id="telemetryHudBlinkers">◁ ▷</span>
+                        <span class="telemetry-hud-metric" id="telemetryHudBrake">—</span>
+                        <span class="telemetry-hud-metric" id="telemetryHudThrottle">THR —%</span>
+                        <span class="telemetry-hud-metric" id="telemetryHudSteering">STEER —°</span>
+                    </div>
+                </div>
+            `;
+
+            // Default placement: inside the Front tile (or first), so it doesn't float over the entire grid.
+            this.videoGrid.prepend(hud);
+            this.refreshTelemetryHudRefs();
+            this.attachTelemetryHudToBestVideoItem();
+        } catch {
+            // ignore
+        }
     }
 
     initializeElements() {
@@ -46,6 +156,20 @@ class TeslaCamPlayer {
         
         // Video elements
         this.videoGrid = document.getElementById('videoGrid');
+
+        // Telemetry HUD + debug panel
+        this.ensureTelemetryHud();
+        this.telemetryHud = document.getElementById('telemetryHud');
+        this.telemetryHudGear = document.getElementById('telemetryHudGear');
+        this.telemetryHudSpeed = document.getElementById('telemetryHudSpeed');
+        this.telemetryHudUnit = document.getElementById('telemetryHudUnit');
+        this.telemetryHudSub = document.getElementById('telemetryHudSub');
+        this.telemetryHudBlinkers = document.getElementById('telemetryHudBlinkers');
+        this.telemetryHudBrake = document.getElementById('telemetryHudBrake');
+        this.telemetryHudThrottle = document.getElementById('telemetryHudThrottle');
+        this.telemetryHudSteering = document.getElementById('telemetryHudSteering');
+
+        // Telemetry debug panel removed for production
         this.fileCountSpan = document.getElementById('fileCount');
         this.eventCountSpan = document.getElementById('eventCount');
         this.eventInfoSpan = document.getElementById('eventInfo');
@@ -138,118 +262,14 @@ class TeslaCamPlayer {
         this.selectClipsBtn.addEventListener('click', () => this.toggleSelectMode());
         this.combineBtn.addEventListener('click', () => this.combineSelectedClips());
         
-        // Test progress overlay (remove in production)
-        if (!this.isProduction) {
-            window.testProgress = () => {
-                console.log('testProgress called');
-                this.showProgress('Test Progress', 'Testing progress overlay...');
-                let progress = 0;
-                const interval = setInterval(() => {
-                    progress += 10;
-                    console.log('Updating progress:', progress);
-                    this.updateProgress(progress, `Testing... ${progress}%`);
-                    if (progress >= 100) {
-                        clearInterval(interval);
-                        setTimeout(() => this.hideProgress(), 1000);
-                    }
-                }, 500);
-            };
-            
-            // Force hide progress overlay
-            window.forceHideProgress = () => {
-                console.log('Force hiding progress overlay');
-                const overlay = document.getElementById('progressOverlay');
-                if (overlay) {
-                    overlay.style.cssText = 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;';
-                }
-            };
-            
-            // Simple test with inline styles
-            window.testProgressSimple = () => {
-                console.log('testProgressSimple called');
-                const overlay = document.getElementById('progressOverlay');
-                overlay.style.cssText = `
-                    position: fixed !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    background: rgba(0, 0, 0, 0.9) !important;
-                    display: flex !important;
-                    justify-content: center !important;
-                    align-items: center !important;
-                    z-index: 9999 !important;
-                    visibility: visible !important;
-                    opacity: 1 !important;
-                `;
-                
-                const title = document.getElementById('progressTitle');
-                const status = document.getElementById('progressStatus');
-                const fill = document.getElementById('progressFill');
-                const text = document.getElementById('progressText');
-                
-                title.textContent = 'Simple Test';
-                status.textContent = 'Testing with inline styles...';
-                fill.style.width = '50%';
-                text.textContent = '50%';
-                
-                setTimeout(() => {
-                    overlay.style.display = 'none';
-                }, 3000);
-            };
-            
-            // Create overlay from scratch
-            window.testProgressFromScratch = () => {
-                console.log('testProgressFromScratch called');
-                
-                // Remove existing overlay
-                const existingOverlay = document.getElementById('progressOverlay');
-                if (existingOverlay) {
-                    existingOverlay.remove();
-                }
-                
-                // Create new overlay from scratch
-                const overlay = document.createElement('div');
-                overlay.id = 'testOverlay';
-                overlay.style.cssText = `
-                    position: fixed !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    background: rgba(255, 0, 0, 0.8) !important;
-                    display: flex !important;
-                    justify-content: center !important;
-                    align-items: center !important;
-                    z-index: 99999 !important;
-                    color: white !important;
-                    font-size: 24px !important;
-                    font-weight: bold !important;
-                `;
-                
-                overlay.innerHTML = `
-                    <div style="background: white; color: black; padding: 40px; border-radius: 10px; text-align: center;">
-                        <h2>TEST OVERLAY</h2>
-                        <p>This is a test overlay created from scratch</p>
-                        <div style="background: #ddd; width: 300px; height: 20px; border-radius: 10px; margin: 20px 0;">
-                            <div style="background: #667eea; width: 50%; height: 100%; border-radius: 10px;"></div>
-                        </div>
-                        <p>Progress: 50%</p>
-                    </div>
-                `;
-                
-                document.body.appendChild(overlay);
-                
-                setTimeout(() => {
-                    overlay.remove();
-                }, 3000);
-            };
-        }
+        // (dev-only progress overlay test helpers removed for production)
     }
 
     handleFileSelection(event) {
         const files = Array.from(event.target.files);
-        this.processFiles(files);
+        const videoFiles = files.filter(f => f.type.startsWith('video/'));
+        const telemetryFiles = files.filter(f => f.name.toLowerCase().endsWith('.json') || f.name.toLowerCase().endsWith('.csv'));
+        this.processFiles(videoFiles, telemetryFiles);
     }
 
     handleDirectorySelection(event) {
@@ -266,7 +286,7 @@ class TeslaCamPlayer {
             });
         });
         
-        // Filter for video files and organize by directory structure
+        // Filter for video files and (optional) telemetry sidecars
         const videoFiles = files.filter(file => {
             const isVideo = file.type.startsWith('video/') || 
                            file.name.toLowerCase().endsWith('.mp4') ||
@@ -279,6 +299,15 @@ class TeslaCamPlayer {
             }
             return isVideo;
         });
+
+        const telemetryFiles = files.filter(file => {
+            const lower = file.name.toLowerCase();
+            return lower.endsWith('.json') || lower.endsWith('.csv');
+        });
+
+        if (telemetryFiles.length > 0) {
+            this.log('Found potential telemetry sidecar files:', telemetryFiles.map(f => f.name));
+        }
         
         this.log('Video files found:', videoFiles.length);
         
@@ -288,7 +317,7 @@ class TeslaCamPlayer {
         }
 
         this.showSuccess(`Found ${videoFiles.length} video files in directory`);
-        this.processFiles(videoFiles);
+        this.processFiles(videoFiles, telemetryFiles);
     }
 
     handleDragOver(event) {
@@ -330,17 +359,15 @@ class TeslaCamPlayer {
         })).then(() => {
             if (files.length > 0) {
                 this.showSuccess(`Found ${files.length} video files`);
-                this.processFiles(files);
+                this.processFiles(files, []);
             } else {
                 this.showError('No video files found in the dropped items.');
             }
         });
     }
 
-    processFiles(files) {
-        const videoFiles = files.filter(file => file.type.startsWith('video/'));
-        
-        if (videoFiles.length === 0) {
+    processFiles(videoFiles, telemetryFiles = []) {
+        if (!Array.isArray(videoFiles) || videoFiles.length === 0) {
             this.showError('No video files found. Please select video files.');
             return;
         }
@@ -370,6 +397,12 @@ class TeslaCamPlayer {
 
         // Group videos by events
         this.groupVideosByEvents();
+
+        // Telemetry: attempt to extract from newer TeslaCam MP4 metadata tracks.
+        // This runs in the background and updates the UI when ready.
+        if (this.telemetryEnabled) {
+            this.extractTelemetryForEvents(telemetryFiles);
+        }
         
         // Update UI
         this.updateFileCount();
@@ -444,7 +477,7 @@ class TeslaCamPlayer {
             return new Date(fallbackMatch[1].replace(/_/g, '-'));
         }
         
-        console.warn('Could not extract timestamp from filename:', filename);
+        this.log('Could not extract timestamp from filename:', filename);
         return new Date();
     }
 
@@ -620,8 +653,10 @@ class TeslaCamPlayer {
     }
 
     createVideoGrid() {
+        // This gets called after selecting files and rebuilds the grid.
         this.videoGrid.innerHTML = '';
-        
+        this.ensureTelemetryHud();
+
         // Get all unique cameras from all videos, filtering out hidden files
         const allCameras = [...new Set(this.videos
             .filter(video => !video.name.startsWith('._')) // Filter out hidden files
@@ -670,6 +705,9 @@ class TeslaCamPlayer {
         });
         
         this.log(`Created ${allCameras.length} video slots for cameras:`, allCameras);
+
+        // After rebuilding, reattach HUD into a single tile (Front/enlarged) so it doesn't cover the whole grid.
+        this.attachTelemetryHudToBestVideoItem();
     }
 
     loadEvent(eventIndex) {
@@ -717,6 +755,9 @@ class TeslaCamPlayer {
         
         // Update timeline
         this.updateTimeline();
+
+        // Telemetry for this event (if extracted)
+        this.refreshTelemetryPanel();
         
         // Update dropdown selection to reflect current event
         this.updateEventDropdown();
@@ -782,7 +823,7 @@ class TeslaCamPlayer {
         const time = parseFloat(timeValue);
         
         if (isNaN(time)) {
-            console.warn('Invalid time value:', timeValue);
+            this.log('Invalid time value:', timeValue);
             return;
         }
         
@@ -815,6 +856,7 @@ class TeslaCamPlayer {
                     this.currentTimeSpan.textContent = this.formatTime(mainVideo.currentTime || 0);
                     this.totalTimeSpan.textContent = this.formatTime(mainVideo.duration);
                     this.timeline.value = mainVideo.currentTime || 0;
+                    this.updateTelemetryDisplay(mainVideo.currentTime || 0);
                 }
             };
             
@@ -828,6 +870,791 @@ class TeslaCamPlayer {
             
             this.log('Timeline setup complete. Max duration:', mainVideo.duration);
         }
+    }
+
+    // ---------------------------
+    // Telemetry
+    // ---------------------------
+
+    async extractTelemetryForEvents(sidecarFiles = []) {
+        try {
+            // 1) Optional sidecars (best-effort). We only support simple JSON formats.
+            const sidecarByTimestamp = await this.parseTelemetrySidecars(sidecarFiles);
+
+            // 2) Embedded timed metadata tracks (best-effort via MP4Box)
+            const tasks = this.events.map(async (evt, eventIndex) => {
+                // Prefer Front camera as canonical
+                const videoInfo = (evt.videos || []).find(v => v.camera === 'Front') || (evt.videos || [])[0];
+                if (!videoInfo?.file) return;
+
+                // If sidecar matches this event timestamp, prefer it.
+                const ts = evt.timestamp || (videoInfo.timestamp ?? null);
+                if (ts && sidecarByTimestamp.has(ts)) {
+                    this.telemetryByEventIndex.set(eventIndex, sidecarByTimestamp.get(ts));
+                    return;
+                }
+
+                const telemetry = await this.parseMp4Telemetry(videoInfo.file);
+                if (telemetry?.points?.length) {
+                    this.telemetryByEventIndex.set(eventIndex, telemetry);
+                }
+            });
+
+            await Promise.allSettled(tasks);
+
+            // Set current event telemetry
+            this.currentTelemetry = this.telemetryByEventIndex.get(this.currentEventIndex) || null;
+            this.refreshTelemetryPanel();
+
+        } catch (e) {
+            this.logError('Telemetry extraction failed:', e);
+        }
+    }
+
+    async parseTelemetrySidecars(files) {
+        const map = new Map();
+        if (!files || files.length === 0) return map;
+
+        for (const file of files) {
+            try {
+                if (!file.name.toLowerCase().endsWith('.json')) continue;
+                const text = await file.text();
+                const parsed = JSON.parse(text);
+
+                // Expected best-effort formats:
+                // A) { timestamp: "2025-01-01_12-00-00", points: [{t:0.0, data:{...}}] }
+                // B) { eventTimestamp: "...", telemetry: [...] }
+                const ts = parsed.timestamp || parsed.eventTimestamp || parsed.event || null;
+                const points = parsed.points || parsed.telemetry || parsed.data || null;
+                if (!ts || !Array.isArray(points)) continue;
+
+                const normalized = points
+                    .map(p => {
+                        const t = typeof p.t === 'number' ? p.t : (typeof p.time === 'number' ? p.time : null);
+                        const data = p.data || p.values || p;
+                        if (t === null || typeof data !== 'object') return null;
+                        return { t, data };
+                    })
+                    .filter(Boolean)
+                    .sort((a, b) => a.t - b.t);
+
+                const keys = this.collectTelemetryKeys(normalized);
+                map.set(ts, { points: normalized, keys, source: `sidecar:${file.name}` });
+            } catch (e) {
+                this.log('Ignoring sidecar (parse failed):', file.name, e?.message);
+            }
+        }
+
+        return map;
+    }
+
+    collectTelemetryKeys(points) {
+        const keys = new Set();
+        for (const p of points || []) {
+            if (!p?.data) continue;
+            Object.keys(p.data).forEach(k => {
+                if (k === 't' || k === 'time' || k === 'timestamp') return;
+                keys.add(k);
+            });
+        }
+        return Array.from(keys);
+    }
+
+    // Tesla telemetry (2025 Holiday Update+): H.264 SEI user_data_unregistered messages
+    // using the UUID: 42424269-0801-1001-18df-e61025933ea9
+    // Payload is a protobuf message (SeiMetadata) in proto3 format.
+    // Ref implementation: https://github.com/JVital2013/TeslaCamBurner (Parser.cs + dashcam.proto)
+    getTeslaTelemetryFromSeiUserData(userBytes) {
+        try {
+            const u8 = (userBytes instanceof Uint8Array) ? userBytes : new Uint8Array(userBytes);
+
+            // 1) Try protobuf decode (preferred)
+            const decoded = this.decodeTeslaSeiProtobuf(u8);
+            if (decoded && Object.keys(decoded).length) return decoded;
+
+            // 2) Fallback: heuristics on fixed offsets (kept for safety)
+            const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+            const out = {};
+            if (u8.byteLength >= 6) {
+                const speedMaybe = dv.getFloat32(2, true);
+                if (Number.isFinite(speedMaybe) && speedMaybe >= 0 && speedMaybe <= 250) {
+                    // Fallback heuristic (if protobuf decode fails): treat value as mph and convert to km/h
+                    out.speed_kmh = Math.round((speedMaybe * 1.609344) * 10) / 10;
+                }
+            }
+            if (u8.byteLength >= 20) {
+                const latMaybe = dv.getFloat64(12, true);
+                if (Number.isFinite(latMaybe) && latMaybe >= -90 && latMaybe <= 90) {
+                    out.lat = latMaybe;
+                }
+            }
+            if (u8.byteLength >= 29) {
+                const lonMaybe = dv.getFloat64(21, true);
+                if (Number.isFinite(lonMaybe) && lonMaybe >= -180 && lonMaybe <= 180) {
+                    out.lon = lonMaybe;
+                }
+            }
+            return Object.keys(out).length ? out : null;
+        } catch {
+            return null;
+        }
+    }
+
+    decodeTeslaSeiProtobuf(u8) {
+        // SeiMetadata from dashcam.proto:
+        // 1 version (varint)
+        // 2 gear_state (varint)
+        // 3 frame_seq_no (varint)
+        // 4 vehicle_speed_mps (fixed32 float)
+        // 5 accelerator_pedal_position (fixed32 float)
+        // 6 steering_wheel_angle (fixed32 float)
+        // 7 blinker_on_left (varint bool)
+        // 8 blinker_on_right (varint bool)
+        // 9 brake_applied (varint bool)
+        // 10 autopilot_state (varint)
+        // 11 latitude_deg (fixed64 double)
+        // 12 longitude_deg (fixed64 double)
+        // 13 heading_deg (fixed64 double)
+        // 14/15/16 linear_acceleration_mps2_{x,y,z} (fixed64 double)
+
+        const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+        let off = 0;
+
+        const readVarint = () => {
+            let shift = 0;
+            let result = 0;
+            while (off < u8.length) {
+                const b = u8[off++];
+                result |= (b & 0x7f) << shift;
+                if ((b & 0x80) === 0) return result >>> 0;
+                shift += 7;
+                if (shift > 35) return null; // too big for JS bit ops
+            }
+            return null;
+        };
+
+        const readFixed32Float = () => {
+            if (off + 4 > u8.length) return null;
+            const v = dv.getFloat32(off, true);
+            off += 4;
+            return v;
+        };
+
+        const readFixed64Double = () => {
+            if (off + 8 > u8.length) return null;
+            const v = dv.getFloat64(off, true);
+            off += 8;
+            return v;
+        };
+
+        const skip = (wireType) => {
+            if (wireType === 0) {
+                const v = readVarint();
+                return v !== null;
+            }
+            if (wireType === 5) {
+                off += 4;
+                return off <= u8.length;
+            }
+            if (wireType === 1) {
+                off += 8;
+                return off <= u8.length;
+            }
+            if (wireType === 2) {
+                const len = readVarint();
+                if (len === null) return false;
+                off += len;
+                return off <= u8.length;
+            }
+            return false;
+        };
+
+        const out = {};
+
+        while (off < u8.length) {
+            const tag = readVarint();
+            if (tag === null) break;
+            if (tag === 0) break;
+
+            const fieldNo = tag >>> 3;
+            const wireType = tag & 0x7;
+
+            switch (fieldNo) {
+                case 1: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.version = readVarint();
+                    break;
+                }
+                case 2: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.gear_state = readVarint();
+                    break;
+                }
+                case 3: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.frame_seq_no = readVarint();
+                    break;
+                }
+                case 4: {
+                    if (wireType !== 5) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed32Float();
+                    if (v !== null && Number.isFinite(v)) {
+                        out.vehicle_speed_mps = v;
+                        out.speed_kmh = Math.round((v * 3.6) * 10) / 10;
+                    }
+                    break;
+                }
+                case 5: {
+                    if (wireType !== 5) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed32Float();
+                    if (v !== null && Number.isFinite(v)) out.accelerator_pedal_position = v;
+                    break;
+                }
+                case 6: {
+                    if (wireType !== 5) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed32Float();
+                    if (v !== null && Number.isFinite(v)) out.steering_wheel_angle = v;
+                    break;
+                }
+                case 7: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.blinker_on_left = !!readVarint();
+                    break;
+                }
+                case 8: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.blinker_on_right = !!readVarint();
+                    break;
+                }
+                case 9: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.brake_applied = !!readVarint();
+                    break;
+                }
+                case 10: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.autopilot_state = readVarint();
+                    break;
+                }
+                case 11: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.lat = v;
+                    break;
+                }
+                case 12: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.lon = v;
+                    break;
+                }
+                case 13: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.heading_deg = v;
+                    break;
+                }
+                case 14: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.linear_acceleration_mps2_x = v;
+                    break;
+                }
+                case 15: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.linear_acceleration_mps2_y = v;
+                    break;
+                }
+                case 16: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.linear_acceleration_mps2_z = v;
+                    break;
+                }
+                default: {
+                    if (!skip(wireType)) return null;
+                    break;
+                }
+            }
+        }
+
+        // sanity checks
+        if (out.lat !== undefined && (out.lat < -90 || out.lat > 90)) delete out.lat;
+        if (out.lon !== undefined && (out.lon < -180 || out.lon > 180)) delete out.lon;
+
+        return Object.keys(out).length ? out : null;
+    }
+
+    decodeH264SeiUserDataUnregisteredFromAvcSample(sampleU8) {
+        const out = [];
+        if (!sampleU8 || sampleU8.byteLength < 8) return out;
+
+        // TeslaCam SEI payload marker:
+        // Some implementations treat it like a UUID (16 bytes), but TeslaCamBurner only checks for a 0x42*...0x69 prefix.
+        const UUID16 = new Uint8Array([0x42,0x42,0x42,0x69,0x08,0x01,0x10,0x01,0x18,0xdf,0xe6,0x10,0x25,0x93,0x3e,0xa9]);
+        const UUID_PREFIX = 0x69; // after one or more 0x42 bytes
+
+        // AVC samples are length-prefixed NAL units (typically 4-byte lengths)
+        let off = 0;
+        const dv = new DataView(sampleU8.buffer, sampleU8.byteOffset, sampleU8.byteLength);
+        while (off + 4 <= sampleU8.byteLength) {
+            const nalLen = dv.getUint32(off, false);
+            off += 4;
+            if (nalLen <= 0 || off + nalLen > sampleU8.byteLength) break;
+            const nal = sampleU8.subarray(off, off + nalLen);
+            off += nalLen;
+            if (nal.length < 2) continue;
+            const nalType = nal[0] & 0x1f;
+            if (nalType !== 6) continue; // SEI
+
+            // Convert EBSP->RBSP (remove emulation prevention bytes)
+            const rbsp = [];
+            let zeros = 0;
+            for (let i = 1; i < nal.length; i++) {
+                const b = nal[i];
+                if (zeros === 2 && b === 0x03) {
+                    zeros = 0;
+                    continue;
+                }
+                rbsp.push(b);
+                zeros = (b === 0x00) ? zeros + 1 : 0;
+            }
+
+            let idx = 0;
+            while (idx < rbsp.length) {
+                // payloadType
+                let payloadType = 0;
+                while (idx < rbsp.length && rbsp[idx] === 0xff) { payloadType += 255; idx++; }
+                if (idx >= rbsp.length) break;
+                payloadType += rbsp[idx++];
+
+                // payloadSize
+                let payloadSize = 0;
+                while (idx < rbsp.length && rbsp[idx] === 0xff) { payloadSize += 255; idx++; }
+                if (idx >= rbsp.length) break;
+                payloadSize += rbsp[idx++];
+
+                if (idx + payloadSize > rbsp.length) break;
+                const payload = rbsp.slice(idx, idx + payloadSize);
+                idx += payloadSize;
+
+                // user_data_unregistered
+                if (payloadType === 5 && payload.length >= 4) {
+                    // Case A: full 16-byte UUID prefix (common)
+                    let match16 = payload.length >= 16;
+                    if (match16) {
+                        for (let i = 0; i < 16; i++) {
+                            if (payload[i] !== UUID16[i]) { match16 = false; break; }
+                        }
+                    }
+                    if (match16) {
+                        out.push(new Uint8Array(payload.slice(16)));
+                        continue;
+                    }
+
+                    // Case B: TeslaCamBurner-style prefix: 0x42 0x42 0x42 0x69 (one or more 0x42 then 0x69)
+                    // Find the first non-0x42 byte; if it's 0x69, strip through it.
+                    let j = 0;
+                    while (j < payload.length && payload[j] === 0x42) j++;
+                    if (j > 0 && j < payload.length && payload[j] === UUID_PREFIX) {
+                        // protobuf starts immediately after 0x69
+                        out.push(new Uint8Array(payload.slice(j + 1)));
+                        continue;
+                    }
+
+                    // Case C: search within payload for the pattern 0x42 0x42 0x42 0x69
+                    for (let k = 0; k + 3 < payload.length; k++) {
+                        if (payload[k] === 0x42 && payload[k + 1] === 0x42 && payload[k + 2] === 0x42 && payload[k + 3] === 0x69) {
+                            out.push(new Uint8Array(payload.slice(k + 4)));
+                            break;
+                        }
+                    }
+                }
+
+                // stop if rbsp trailing bits are reached (best-effort)
+                if (idx < rbsp.length && rbsp[idx] === 0x80) break;
+            }
+        }
+
+        return out;
+    }
+
+    async parseMp4Telemetry(file) {
+        // We avoid depending on mp4box.js bundling (recent builds are ESM-only and break in classic <script>).
+        // Instead, do a best-effort scan of the MP4's 'mdat' box and parse H.264 NAL units like TeslaCamBurner.
+        if (!file) return null;
+
+        const telemetry = await this.parseTeslaTelemetryFromMdat(file);
+        return telemetry;
+    }
+
+    async parseTeslaTelemetryFromMdat(file) {
+        // Production: no debug UI/logs; just return telemetry if found.
+        const stats = { nal: 0, sei: 0, userData: 0, decoded: 0, mode: 'avc-length' };
+        const setNoTelemetry = (_reason) => null;
+
+        try {
+            const buf = await file.arrayBuffer();
+            const u8 = new Uint8Array(buf);
+            const dv = new DataView(buf);
+
+            // Find first 'mdat' box.
+            // Use BigInt for 64-bit sizes to avoid precision bugs on large files.
+            let pos = 0;
+            let mdatStart = -1;
+            let mdatEnd = -1;
+
+            const readType = (p) => String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]);
+            const readU32 = (p) => dv.getUint32(p, false);
+            const readU64 = (p) => {
+                // DataView.getBigUint64 may not exist in older browsers; fall back.
+                if (typeof dv.getBigUint64 === 'function') return dv.getBigUint64(p, false);
+                const hi = BigInt(dv.getUint32(p, false));
+                const lo = BigInt(dv.getUint32(p + 4, false));
+                return (hi << 32n) | lo;
+            };
+
+            while (pos + 8 <= u8.length) {
+                const size32 = readU32(pos);
+                const type = readType(pos);
+                let headerSize = 8;
+                let boxSizeBig = BigInt(size32);
+
+                if (size32 === 1) {
+                    if (pos + 16 > u8.length) break;
+                    boxSizeBig = readU64(pos + 8);
+                    headerSize = 16;
+                } else if (size32 === 0) {
+                    boxSizeBig = BigInt(u8.length - pos);
+                }
+
+                if (boxSizeBig <= BigInt(headerSize)) break;
+
+                const boxSizeNum = boxSizeBig > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(boxSizeBig);
+
+                if (type === 'mdat') {
+                    mdatStart = pos + headerSize;
+                    // Clamp end
+                    const end = (boxSizeBig > BigInt(u8.length - pos)) ? u8.length : (pos + Number(boxSizeBig));
+                    mdatEnd = Math.min(u8.length, end);
+                    break;
+                }
+
+                // Advance safely; if box is insane, abort.
+                if (boxSizeNum <= headerSize || pos + boxSizeNum <= pos) break;
+                pos += boxSizeNum;
+            }
+
+            // Fallback: raw scan for 'mdat' marker if structured parse fails.
+            if (mdatStart < 0 || mdatEnd <= mdatStart) {
+                const needle = [0x6d, 0x64, 0x61, 0x74]; // 'mdat'
+                let found = -1;
+                // Search in the first ~2MB of header region, where boxes usually live.
+                const limit = Math.min(u8.length - 4, 2 * 1024 * 1024);
+                for (let p = 4; p < limit; p++) {
+                    if (u8[p] === needle[0] && u8[p + 1] === needle[1] && u8[p + 2] === needle[2] && u8[p + 3] === needle[3]) {
+                        found = p - 4; // size field starts 4 bytes before type
+                        break;
+                    }
+                }
+                if (found >= 0 && found + 8 <= u8.length) {
+                    const size32 = readU32(found);
+                    let headerSize = 8;
+                    let boxSizeBig = BigInt(size32);
+                    if (size32 === 1 && found + 16 <= u8.length) {
+                        boxSizeBig = readU64(found + 8);
+                        headerSize = 16;
+                    } else if (size32 === 0) {
+                        boxSizeBig = BigInt(u8.length - found);
+                    }
+                    mdatStart = found + headerSize;
+                    const end = (boxSizeBig > BigInt(u8.length - found)) ? u8.length : (found + Number(boxSizeBig));
+                    mdatEnd = Math.min(u8.length, end);
+                }
+            }
+
+            if (mdatStart < 0 || mdatEnd <= mdatStart) {
+                return setNoTelemetry('no-mdat-found');
+            }
+
+            // Scan NAL units inside mdat.
+            // Preferred: MP4/AVC length-prefixed NALs [uint32 nalSize][nalBytes...]
+            // Fallback: Annex-B start codes 00 00 01 / 00 00 00 01
+
+            let pending = null;
+            let frameIndex = 0;
+            const points = [];
+
+            const processNal = (nal) => {
+                if (!nal || nal.length < 2) return;
+                stats.nal++;
+                const nalType = nal[0] & 0x1f;
+
+                if (nalType === 6) {
+                    // SEI can contain multiple payloads; user_data_unregistered is payloadType=5.
+                    // Do NOT assume anything about nal[1] (that's an implementation detail and often not 0x05).
+                    stats.sei++;
+
+                    const sample = new Uint8Array(4 + nal.length);
+                    sample[0] = (nal.length >>> 24) & 0xff;
+                    sample[1] = (nal.length >>> 16) & 0xff;
+                    sample[2] = (nal.length >>> 8) & 0xff;
+                    sample[3] = nal.length & 0xff;
+                    sample.set(nal, 4);
+
+                    const seiUsers = this.decodeH264SeiUserDataUnregisteredFromAvcSample(sample);
+                    stats.userData += seiUsers.length;
+                    for (const userBytes of seiUsers) {
+                        const decoded = this.getTeslaTelemetryFromSeiUserData(userBytes);
+                        if (decoded) {
+                            pending = decoded;
+                            stats.decoded++;
+                        }
+                    }
+                    return;
+                }
+
+                if (nalType === 1 || nalType === 5) {
+                    if (pending) {
+                        const fps = 36;
+                        const t = frameIndex / fps;
+                        points.push({ t, data: pending });
+                        pending = null;
+                    }
+                    frameIndex++;
+                }
+            };
+
+            // Try AVC length-prefixed
+            let i = mdatStart;
+            let bad = 0;
+            while (i + 4 <= mdatEnd) {
+                const nalSize = dv.getUint32(i, false);
+                i += 4;
+                if (nalSize < 2 || i + nalSize > mdatEnd) {
+                    bad++;
+                    if (bad > 20) break;
+                    // try to resync by moving one byte
+                    i = Math.max(mdatStart, i - 3);
+                    continue;
+                }
+                bad = 0;
+                const nal = u8.subarray(i, i + nalSize);
+                i += nalSize;
+                processNal(nal);
+            }
+
+            // Fallback to AnnexB if nothing decoded
+            if (stats.decoded === 0) {
+                stats.mode = 'annexb';
+                const scanStartCodes = (start, end) => {
+                    const data = u8.subarray(start, end);
+                    const findStart = (from) => {
+                        for (let p = from; p + 3 < data.length; p++) {
+                            if (data[p] === 0x00 && data[p + 1] === 0x00) {
+                                if (data[p + 2] === 0x01) return { pos: p, len: 3 };
+                                if (data[p + 2] === 0x00 && data[p + 3] === 0x01) return { pos: p, len: 4 };
+                            }
+                        }
+                        return null;
+                    };
+
+                    let cur = findStart(0);
+                    while (cur) {
+                        const next = findStart(cur.pos + cur.len);
+                        const nalStart = cur.pos + cur.len;
+                        const nalEnd = next ? next.pos : data.length;
+                        if (nalEnd > nalStart) {
+                            processNal(data.subarray(nalStart, nalEnd));
+                        }
+                        cur = next;
+                    }
+                };
+
+                scanStartCodes(mdatStart, mdatEnd);
+            }
+
+            if (!points.length) {
+                return setNoTelemetry(stats.decoded === 0 && stats.sei === 0 && stats.nal === 0 ? 'no-nals' : 'no-telemetry-points');
+            }
+            points.sort((a, b) => a.t - b.t);
+            return { points, keys: this.collectTelemetryKeys(points), source: 'mdat-scan' };
+
+        } catch (_e) {
+            return null;
+        }
+    }
+
+    refreshTelemetryPanel() {
+        this.currentTelemetry = this.telemetryByEventIndex.get(this.currentEventIndex) || null;
+
+        if (!this.currentTelemetry?.points?.length) {
+            if (this.telemetryHud) this.telemetryHud.style.display = 'none';
+            return;
+        }
+
+        if (this.telemetryHud) this.telemetryHud.style.display = 'block';
+        this.updateTelemetryDisplay(0);
+    }
+
+    updateTelemetryDisplay(currentTimeSeconds) {
+        if (!this.currentTelemetry?.points?.length) return;
+
+        const point = this.getTelemetryAtTime(this.currentTelemetry.points, currentTimeSeconds);
+        if (!point?.data) return;
+
+        // HUD (overlay)
+        if (this.telemetryHud) {
+            this.telemetryHud.style.display = 'block';
+            // Ensure it's attached to the correct tile
+            this.attachTelemetryHudToBestVideoItem();
+
+            // Gear
+            const gear = point.data.gear_state;
+            const gearLabel = ({0:'PARK',1:'DRIVE',2:'REVERSE',3:'NEUTRAL'})[gear] ?? 'DRIVE';
+            if (this.telemetryHudGear) this.telemetryHudGear.textContent = gearLabel;
+
+            // Speed (km/h)
+            const speed = point.data.speed_kmh ?? point.data.kph;
+            if (this.telemetryHudSpeed) this.telemetryHudSpeed.textContent = (speed !== undefined) ? String(speed) : '—';
+            if (this.telemetryHudUnit) this.telemetryHudUnit.textContent = 'KM/H';
+
+            // Sub status
+            const ap = point.data.autopilot_state;
+            const apLabel = ap === undefined ? 'Manual' : (({0:'Manual',1:'FSD',2:'Autosteer',3:'TACC'})[ap] ?? 'Manual');
+            if (this.telemetryHudSub) this.telemetryHudSub.textContent = apLabel;
+
+            // Blinkers (animated)
+            const bl = !!point.data.blinker_on_left;
+            const br = !!point.data.blinker_on_right;
+            this._blinkLeftActive = bl;
+            this._blinkRightActive = br;
+            if (this.telemetryHudBlinkers) {
+                this.telemetryHudBlinkers.textContent = `${bl ? '◀' : '◁'} ${br ? '▶' : '▷'}`;
+                this.telemetryHudBlinkers.classList.toggle('blink-dim', !(bl || br));
+            }
+
+            // Brake
+            const brake = point.data.brake_applied;
+            if (this.telemetryHudBrake) {
+                this.telemetryHudBrake.textContent = brake ? 'BRAKE' : '—';
+                this.telemetryHudBrake.style.background = brake ? 'rgba(255, 60, 60, 0.35)' : 'rgba(255,255,255,0.10)';
+                this.telemetryHudBrake.style.borderColor = brake ? 'rgba(255, 60, 60, 0.55)' : 'rgba(255,255,255,0.16)';
+            }
+
+            // Throttle
+            if (this.telemetryHudThrottle) {
+                const thr = point.data.accelerator_pedal_position;
+                this.telemetryHudThrottle.textContent = (thr !== undefined) ? `THR ${Math.round(thr)}%` : 'THR —%';
+            }
+
+            // Steering
+            if (this.telemetryHudSteering) {
+                const steer = point.data.steering_wheel_angle;
+                this.telemetryHudSteering.textContent = (steer !== undefined) ? `STEER ${Math.round(steer)}°` : 'STEER —°';
+            }
+        }
+
+        // Debug pills panel removed for production
+    }
+
+    getTelemetryAtTime(points, t) {
+        if (!points || points.length === 0) return null;
+        // Binary search for last point with time <= t
+        let lo = 0;
+        let hi = points.length - 1;
+        let best = points[0];
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            const p = points[mid];
+            if (p.t <= t) {
+                best = p;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return best;
+    }
+
+    drawTelemetryOverlay(ctx, currentTimeSeconds, width, height) {
+        if (!this.currentTelemetry?.points?.length) return;
+        const point = this.getTelemetryAtTime(this.currentTelemetry.points, currentTimeSeconds);
+        if (!point?.data) return;
+
+        // Tesla-like HUD overlay at the top center (burned into exports)
+        const barH = Math.max(66, Math.floor(height * 0.11));
+        const hudW = Math.min(Math.floor(width * 0.44), 380);
+        const hudX = Math.floor((width - hudW) / 2);
+        const hudY = Math.floor(Math.max(8, height * 0.015));
+
+        const gear = point.data.gear_state;
+        const gearLabel = ({0:'PARK',1:'DRIVE',2:'REVERSE',3:'NEUTRAL'})[gear] ?? '';
+        const speed = point.data.speed_kmh ?? point.data.kph;
+        const speedText = (speed !== undefined) ? String(speed) : '—';
+        const ap = point.data.autopilot_state;
+        const apLabel = ap === undefined ? 'Manual' : (({0:'Manual',1:'FSD',2:'Autosteer',3:'TACC'})[ap] ?? 'Manual');
+
+        const bl = !!point.data.blinker_on_left;
+        const br = !!point.data.blinker_on_right;
+        const brake = !!point.data.brake_applied;
+        const thr = point.data.accelerator_pedal_position;
+        const steer = point.data.steering_wheel_angle;
+
+        ctx.save();
+        // No background slab; use text shadow for readability.
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
+        ctx.shadowColor = 'rgba(0,0,0,0.75)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 2;
+
+        // Gear
+        ctx.font = `${Math.max(14, Math.floor(barH * 0.22))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.fillText(gearLabel, hudX + hudW / 2, hudY + 6);
+
+        // Speed
+        ctx.font = `${Math.max(34, Math.floor(barH * 0.55))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(speedText, hudX + hudW / 2, hudY + barH * 0.55);
+
+        // Unit
+        ctx.font = `${Math.max(12, Math.floor(barH * 0.18))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('KM/H', hudX + hudW / 2, hudY + barH - 6);
+
+        // Sub
+        ctx.font = `${Math.max(12, Math.floor(barH * 0.18))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(apLabel, hudX + hudW / 2, hudY + barH + Math.max(14, Math.floor(barH * 0.2)));
+
+        // Extra row (blinkers / brake / thr / steer)
+        ctx.font = `${Math.max(12, Math.floor(barH * 0.18))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.textBaseline = 'alphabetic';
+        const extrasY = hudY + barH + Math.max(22, Math.floor(barH * 0.42));
+        const left = bl ? '◀' : '◁';
+        const right = br ? '▶' : '▷';
+        const blText = `${left} ${right}`;
+        const thrText = (thr !== undefined) ? `THR ${Math.round(thr)}%` : 'THR —%';
+        const stText = (steer !== undefined) ? `STEER ${Math.round(steer)}°` : 'STEER —°';
+        const brakeText = brake ? 'BRAKE' : '—';
+        const extras = `${blText}    ${brakeText}    ${thrText}    ${stText}`;
+        ctx.globalAlpha = (bl || br || brake) ? 1 : 0.9;
+        ctx.fillText(extras, hudX + hudW / 2, extrasY);
+
+        ctx.restore();
+    }
+
+    escapeHtml(str) {
+        return str
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
     }
 
     formatTime(seconds) {
@@ -881,6 +1708,9 @@ class TeslaCamPlayer {
             if (downloadTrigger) {
                 downloadTrigger.style.display = 'none';
             }
+
+            // Move HUD back to Front/first tile
+            this.attachTelemetryHudToBestVideoItem();
         } else {
             // Enlarging - show download button
             videoItem.classList.add('enlarged');
@@ -888,6 +1718,9 @@ class TeslaCamPlayer {
             if (downloadTrigger) {
                 downloadTrigger.style.display = 'block';
             }
+
+            // Move HUD into the enlarged tile
+            this.attachTelemetryHudToBestVideoItem();
         }
     }
 
@@ -1339,6 +2172,10 @@ class TeslaCamPlayer {
 
             this.log(`Found original video: ${originalVideoInfo.name} for camera: ${videoInfo.camera}`);
 
+            // Ensure telemetry context matches the original event for correct overlay timing
+            const previousTelemetry = this.currentTelemetry;
+            this.currentTelemetry = this.telemetryByEventIndex.get(clip.originalEvent) || this.currentTelemetry;
+
             // Create a hidden video element for this specific video
             const hiddenVideo = document.createElement('video');
             hiddenVideo.src = originalVideoInfo.objectUrl;
@@ -1395,6 +2232,9 @@ class TeslaCamPlayer {
 
             // Clean up the hidden video element
             document.body.removeChild(hiddenVideo);
+
+            // Restore telemetry context
+            this.currentTelemetry = previousTelemetry;
 
             // Complete progress
             this.updateProgress(100, 'Download completed!');
@@ -1491,6 +2331,7 @@ class TeslaCamPlayer {
                 // Only draw frame at specified frame rate
                 if (currentTime - lastFrameTime >= frameInterval) {
                     ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                    this.drawTelemetryOverlay(ctx, hiddenVideo.currentTime, width, height);
                     lastFrameTime = currentTime;
                     
                     // Log progress every second
@@ -1589,6 +2430,7 @@ class TeslaCamPlayer {
                     // Optimized frame processing for WebCodecs
                     if (currentTime - lastFrameTime >= frameInterval) {
                         ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                        this.drawTelemetryOverlay(ctx, hiddenVideo.currentTime, width, height);
                         lastFrameTime = currentTime;
                     }
                     
@@ -1876,6 +2718,7 @@ class TeslaCamPlayer {
                     // Only draw frame at specified frame rate
                     if (currentTime - lastFrameTime >= frameInterval) {
                         ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                        this.drawTelemetryOverlay(ctx, hiddenVideo.currentTime, width, height);
                         lastFrameTime = currentTime;
                         
                         // Update progress based on video playback
@@ -2023,6 +2866,7 @@ class TeslaCamPlayer {
                         // Optimized frame processing for WebCodecs
                         if (currentTime - lastFrameTime >= frameInterval) {
                             ctx.drawImage(hiddenVideo, 0, 0, width, height);
+                            this.drawTelemetryOverlay(ctx, hiddenVideo.currentTime, width, height);
                             lastFrameTime = currentTime;
                             
                             // Update progress based on video playback
@@ -2656,84 +3500,32 @@ class TeslaCamPlayer {
     // Helper method for conditional error logging
     logError(...args) {
         if (!this.isProduction) {
-            console.logError(...args);
+            console.error(...args);
         }
     }
     
     // Progress Management Methods
     showProgress(title, status = 'Initializing...') {
-        console.log('showProgress called:', title, status);
-        console.trace('showProgress stack trace:'); // This will show the call stack
-        
         // Hide any existing download overlay
         if (this.downloadOverlay) {
             this.downloadOverlay.style.display = 'none';
         }
-        
-        console.log('Progress elements:', {
-            overlay: this.progressOverlay,
-            title: this.progressTitle,
-            status: this.progressStatus,
-            fill: this.progressFill,
-            text: this.progressText
-        });
-        
+
         if (!this.progressOverlay || !this.progressTitle || !this.progressStatus || !this.progressFill || !this.progressText) {
-            console.error('Progress elements not found!');
+            this.logError('Progress elements not found');
             return;
         }
-        
+
         this.progressTitle.textContent = title;
         this.progressStatus.textContent = status;
         this.progressFill.style.width = '0%';
         this.progressText.textContent = '0%';
-        
+
         this.progressOverlay.style.display = 'flex';
-        console.log('Progress overlay shown');
-        
-        // Debug: Check computed styles
-        const computedStyle = window.getComputedStyle(this.progressOverlay);
-        console.log('Progress overlay computed styles:', {
-            display: computedStyle.display,
-            position: computedStyle.position,
-            zIndex: computedStyle.zIndex,
-            visibility: computedStyle.visibility,
-            opacity: computedStyle.opacity,
-            width: computedStyle.width,
-            height: computedStyle.height
-        });
-        
-        // Force visibility
         this.progressOverlay.style.visibility = 'visible';
         this.progressOverlay.style.opacity = '1';
         this.progressOverlay.style.zIndex = '9999';
-        
-        // Debug: Check if content is visible
-        const panel = this.progressOverlay.querySelector('.progress-panel');
-        const titleElement = this.progressOverlay.querySelector('#progressTitle');
-        const bar = this.progressOverlay.querySelector('#progressBar');
-        const fill = this.progressOverlay.querySelector('#progressFill');
-        
-        console.log('Progress content elements:', {
-            panel: panel,
-            title: titleElement,
-            bar: bar,
-            fill: fill
-        });
-        
-        if (panel) {
-            const panelStyle = window.getComputedStyle(panel);
-            console.log('Panel computed styles:', {
-                display: panelStyle.display,
-                visibility: panelStyle.visibility,
-                opacity: panelStyle.opacity,
-                background: panelStyle.background,
-                width: panelStyle.width,
-                height: panelStyle.height
-            });
-        }
-        
-
+        this.progressOverlay.style.pointerEvents = 'auto';
     }
     
     updateProgress(percentage, status) {
