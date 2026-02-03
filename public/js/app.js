@@ -955,39 +955,229 @@ class TeslaCamPlayer {
         return Array.from(keys);
     }
 
-    // Tesla telemetry (observed in sample MP4): H.264 SEI user_data_unregistered messages
-    // with UUID: 42424269-0801-1001-18df-e61025933ea9
-    // Payload appears binary; we decode known offsets as a best-effort:
-    // - speed_mph: float32 little-endian @ offset 2
-    // - lat: float64 little-endian @ offset 12
-    // - lon: float64 little-endian @ offset 21
+    // Tesla telemetry (2025 Holiday Update+): H.264 SEI user_data_unregistered messages
+    // using the UUID: 42424269-0801-1001-18df-e61025933ea9
+    // Payload is a protobuf message (SeiMetadata) in proto3 format.
+    // Ref implementation: https://github.com/JVital2013/TeslaCamBurner (Parser.cs + dashcam.proto)
     getTeslaTelemetryFromSeiUserData(userBytes) {
         try {
             const u8 = (userBytes instanceof Uint8Array) ? userBytes : new Uint8Array(userBytes);
+
+            // 1) Try protobuf decode (preferred)
+            const decoded = this.decodeTeslaSeiProtobuf(u8);
+            if (decoded && Object.keys(decoded).length) return decoded;
+
+            // 2) Fallback: heuristics on fixed offsets (kept for safety)
             const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
             const out = {};
             if (u8.byteLength >= 6) {
-                const speed = dv.getFloat32(2, true);
-                if (Number.isFinite(speed) && speed >= 0 && speed <= 250) {
-                    out.speed_mph = Math.round(speed * 10) / 10;
+                const speedMaybe = dv.getFloat32(2, true);
+                if (Number.isFinite(speedMaybe) && speedMaybe >= 0 && speedMaybe <= 250) {
+                    out.speed_mph = Math.round(speedMaybe * 10) / 10;
                 }
             }
             if (u8.byteLength >= 20) {
-                const lat = dv.getFloat64(12, true);
-                if (Number.isFinite(lat) && lat >= -90 && lat <= 90) {
-                    out.lat = lat;
+                const latMaybe = dv.getFloat64(12, true);
+                if (Number.isFinite(latMaybe) && latMaybe >= -90 && latMaybe <= 90) {
+                    out.lat = latMaybe;
                 }
             }
             if (u8.byteLength >= 29) {
-                const lon = dv.getFloat64(21, true);
-                if (Number.isFinite(lon) && lon >= -180 && lon <= 180) {
-                    out.lon = lon;
+                const lonMaybe = dv.getFloat64(21, true);
+                if (Number.isFinite(lonMaybe) && lonMaybe >= -180 && lonMaybe <= 180) {
+                    out.lon = lonMaybe;
                 }
             }
             return Object.keys(out).length ? out : null;
         } catch {
             return null;
         }
+    }
+
+    decodeTeslaSeiProtobuf(u8) {
+        // SeiMetadata from dashcam.proto:
+        // 1 version (varint)
+        // 2 gear_state (varint)
+        // 3 frame_seq_no (varint)
+        // 4 vehicle_speed_mps (fixed32 float)
+        // 5 accelerator_pedal_position (fixed32 float)
+        // 6 steering_wheel_angle (fixed32 float)
+        // 7 blinker_on_left (varint bool)
+        // 8 blinker_on_right (varint bool)
+        // 9 brake_applied (varint bool)
+        // 10 autopilot_state (varint)
+        // 11 latitude_deg (fixed64 double)
+        // 12 longitude_deg (fixed64 double)
+        // 13 heading_deg (fixed64 double)
+        // 14/15/16 linear_acceleration_mps2_{x,y,z} (fixed64 double)
+
+        const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+        let off = 0;
+
+        const readVarint = () => {
+            let shift = 0;
+            let result = 0;
+            while (off < u8.length) {
+                const b = u8[off++];
+                result |= (b & 0x7f) << shift;
+                if ((b & 0x80) === 0) return result >>> 0;
+                shift += 7;
+                if (shift > 35) return null; // too big for JS bit ops
+            }
+            return null;
+        };
+
+        const readFixed32Float = () => {
+            if (off + 4 > u8.length) return null;
+            const v = dv.getFloat32(off, true);
+            off += 4;
+            return v;
+        };
+
+        const readFixed64Double = () => {
+            if (off + 8 > u8.length) return null;
+            const v = dv.getFloat64(off, true);
+            off += 8;
+            return v;
+        };
+
+        const skip = (wireType) => {
+            if (wireType === 0) {
+                const v = readVarint();
+                return v !== null;
+            }
+            if (wireType === 5) {
+                off += 4;
+                return off <= u8.length;
+            }
+            if (wireType === 1) {
+                off += 8;
+                return off <= u8.length;
+            }
+            if (wireType === 2) {
+                const len = readVarint();
+                if (len === null) return false;
+                off += len;
+                return off <= u8.length;
+            }
+            return false;
+        };
+
+        const out = {};
+
+        while (off < u8.length) {
+            const tag = readVarint();
+            if (tag === null) break;
+            if (tag === 0) break;
+
+            const fieldNo = tag >>> 3;
+            const wireType = tag & 0x7;
+
+            switch (fieldNo) {
+                case 1: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.version = readVarint();
+                    break;
+                }
+                case 2: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.gear_state = readVarint();
+                    break;
+                }
+                case 3: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.frame_seq_no = readVarint();
+                    break;
+                }
+                case 4: {
+                    if (wireType !== 5) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed32Float();
+                    if (v !== null && Number.isFinite(v)) {
+                        out.vehicle_speed_mps = v;
+                        out.speed_mph = Math.round((v * 2.2369362920544) * 10) / 10;
+                    }
+                    break;
+                }
+                case 5: {
+                    if (wireType !== 5) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed32Float();
+                    if (v !== null && Number.isFinite(v)) out.accelerator_pedal_position = v;
+                    break;
+                }
+                case 6: {
+                    if (wireType !== 5) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed32Float();
+                    if (v !== null && Number.isFinite(v)) out.steering_wheel_angle = v;
+                    break;
+                }
+                case 7: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.blinker_on_left = !!readVarint();
+                    break;
+                }
+                case 8: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.blinker_on_right = !!readVarint();
+                    break;
+                }
+                case 9: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.brake_applied = !!readVarint();
+                    break;
+                }
+                case 10: {
+                    if (wireType !== 0) { if (!skip(wireType)) return null; break; }
+                    out.autopilot_state = readVarint();
+                    break;
+                }
+                case 11: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.lat = v;
+                    break;
+                }
+                case 12: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.lon = v;
+                    break;
+                }
+                case 13: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.heading_deg = v;
+                    break;
+                }
+                case 14: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.linear_acceleration_mps2_x = v;
+                    break;
+                }
+                case 15: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.linear_acceleration_mps2_y = v;
+                    break;
+                }
+                case 16: {
+                    if (wireType !== 1) { if (!skip(wireType)) return null; break; }
+                    const v = readFixed64Double();
+                    if (v !== null && Number.isFinite(v)) out.linear_acceleration_mps2_z = v;
+                    break;
+                }
+                default: {
+                    if (!skip(wireType)) return null;
+                    break;
+                }
+            }
+        }
+
+        // sanity checks
+        if (out.lat !== undefined && (out.lat < -90 || out.lat > 90)) delete out.lat;
+        if (out.lon !== undefined && (out.lon < -180 || out.lon > 180)) delete out.lon;
+
+        return Object.keys(out).length ? out : null;
     }
 
     decodeH264SeiUserDataUnregisteredFromAvcSample(sampleU8) {
@@ -1207,7 +1397,7 @@ class TeslaCamPlayer {
         if (!point?.data) return;
 
         // Pick a small set of keys to render (prefer common ones)
-        const preferred = ['speed', 'speed_mph', 'speed_kph', 'mph', 'kph', 'gear', 'soc', 'battery', 'heading', 'lat', 'lon', 'latitude', 'longitude'];
+        const preferred = ['speed_mph', 'vehicle_speed_mps', 'gear_state', 'autopilot_state', 'brake_applied', 'blinker_on_left', 'blinker_on_right', 'heading_deg', 'lat', 'lon', 'steering_wheel_angle', 'accelerator_pedal_position'];
         const keys = [];
         preferred.forEach(k => { if (k in point.data) keys.push(k); });
         if (keys.length < 6) {
@@ -1264,12 +1454,23 @@ class TeslaCamPlayer {
         ctx.textBaseline = 'middle';
 
         const parts = [];
-        const speed = point.data.speed ?? point.data.mph ?? point.data.kph ?? point.data.speed_mph ?? point.data.speed_kph;
-        if (speed !== undefined) parts.push(`Speed: ${speed}`);
-        const gear = point.data.gear;
-        if (gear !== undefined) parts.push(`Gear: ${gear}`);
-        const soc = point.data.soc ?? point.data.battery;
-        if (soc !== undefined) parts.push(`SoC: ${soc}`);
+        const speed = point.data.speed_mph ?? point.data.mph;
+        if (speed !== undefined) parts.push(`Speed: ${speed} mph`);
+
+        const gear = point.data.gear_state;
+        if (gear !== undefined) {
+            const g = ({0:'P',1:'D',2:'R',3:'N'})[gear] ?? String(gear);
+            parts.push(`Gear: ${g}`);
+        }
+
+        if (point.data.brake_applied !== undefined) {
+            parts.push(`Brake: ${point.data.brake_applied ? 'ON' : 'off'}`);
+        }
+
+        if (point.data.autopilot_state !== undefined) {
+            const ap = ({0:'NONE',1:'FSD',2:'AUTOSTEER',3:'TACC'})[point.data.autopilot_state] ?? String(point.data.autopilot_state);
+            parts.push(`AP: ${ap}`);
+        }
 
         // Fallback: show first few primitive values
         if (parts.length === 0) {
