@@ -1299,32 +1299,23 @@ class TeslaCamPlayer {
 
             if (mdatStart < 0 || mdatEnd <= mdatStart) return null;
 
-            // Scan NAL units inside mdat: [uint32 nalSize][nalBytes...]
-            // TeslaCamBurner associates SEI (type 6) metadata with the *next* slice (type 1 or 5).
-            let i = mdatStart;
+            // Scan NAL units inside mdat.
+            // Preferred: MP4/AVC length-prefixed NALs [uint32 nalSize][nalBytes...]
+            // Fallback: Annex-B start codes 00 00 01 / 00 00 00 01
+            const stats = { nal: 0, sei: 0, userData: 0, decoded: 0, mode: 'avc-length' };
+
             let pending = null;
             let frameIndex = 0;
             const points = [];
 
-            while (i + 4 <= mdatEnd) {
-                const nalSize = dv.getUint32(i, false);
-                i += 4;
-                if (nalSize < 2 || i + nalSize > mdatEnd) {
-                    // skip invalid
-                    i += Math.max(0, nalSize);
-                    continue;
-                }
-
-                const nal = u8.subarray(i, i + nalSize);
-                i += nalSize;
-
+            const processNal = (nal) => {
+                if (!nal || nal.length < 2) return;
+                stats.nal++;
                 const nalType = nal[0] & 0x1f;
 
                 if (nalType === 6) {
-                    // SEI. We only care about user_data_unregistered. TeslaCamBurner checks nal[1] == 5.
+                    stats.sei++;
                     if (nal.length > 2 && nal[1] === 5) {
-                        // Try to parse user_data_unregistered payload(s)
-                        // Wrap as AVC sample with a single NAL for reuse of existing parser:
                         const sample = new Uint8Array(4 + nal.length);
                         sample[0] = (nal.length >>> 24) & 0xff;
                         sample[1] = (nal.length >>> 16) & 0xff;
@@ -1333,20 +1324,20 @@ class TeslaCamPlayer {
                         sample.set(nal, 4);
 
                         const seiUsers = this.decodeH264SeiUserDataUnregisteredFromAvcSample(sample);
+                        stats.userData += seiUsers.length;
                         for (const userBytes of seiUsers) {
                             const decoded = this.getTeslaTelemetryFromSeiUserData(userBytes);
                             if (decoded) {
                                 pending = decoded;
+                                stats.decoded++;
                             }
                         }
                     }
-                    continue;
+                    return;
                 }
 
                 if (nalType === 1 || nalType === 5) {
-                    // Non-IDR/IDR slice: new frame/sample boundary
                     if (pending) {
-                        // Map to time using a default FPS (best-effort). We'll treat FPS as ~36 to match Tesla sample.
                         const fps = 36;
                         const t = frameIndex / fps;
                         points.push({ t, data: pending });
@@ -1354,9 +1345,61 @@ class TeslaCamPlayer {
                     }
                     frameIndex++;
                 }
+            };
+
+            // Try AVC length-prefixed
+            let i = mdatStart;
+            let bad = 0;
+            while (i + 4 <= mdatEnd) {
+                const nalSize = dv.getUint32(i, false);
+                i += 4;
+                if (nalSize < 2 || i + nalSize > mdatEnd) {
+                    bad++;
+                    if (bad > 20) break;
+                    // try to resync by moving one byte
+                    i = Math.max(mdatStart, i - 3);
+                    continue;
+                }
+                bad = 0;
+                const nal = u8.subarray(i, i + nalSize);
+                i += nalSize;
+                processNal(nal);
             }
 
-            if (!points.length) return null;
+            // Fallback to AnnexB if nothing decoded
+            if (stats.decoded === 0) {
+                stats.mode = 'annexb';
+                const scanStartCodes = (start, end) => {
+                    const data = u8.subarray(start, end);
+                    const findStart = (from) => {
+                        for (let p = from; p + 3 < data.length; p++) {
+                            if (data[p] === 0x00 && data[p + 1] === 0x00) {
+                                if (data[p + 2] === 0x01) return { pos: p, len: 3 };
+                                if (data[p + 2] === 0x00 && data[p + 3] === 0x01) return { pos: p, len: 4 };
+                            }
+                        }
+                        return null;
+                    };
+
+                    let cur = findStart(0);
+                    while (cur) {
+                        const next = findStart(cur.pos + cur.len);
+                        const nalStart = cur.pos + cur.len;
+                        const nalEnd = next ? next.pos : data.length;
+                        if (nalEnd > nalStart) {
+                            processNal(data.subarray(nalStart, nalEnd));
+                        }
+                        cur = next;
+                    }
+                };
+
+                scanStartCodes(mdatStart, mdatEnd);
+            }
+
+            if (!points.length) {
+                this.log('Telemetry not detected. Stats:', stats);
+                return null;
+            }
             points.sort((a, b) => a.t - b.t);
             return { points, keys: this.collectTelemetryKeys(points), source: 'mdat-scan' };
 
