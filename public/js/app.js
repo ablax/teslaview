@@ -1264,6 +1264,7 @@ class TeslaCamPlayer {
             try {
                 const mp4boxfile = MP4Box.createFile();
                 const trackTimescales = new Map();
+                const trackTypes = new Map();
                 const points = [];
 
                 let idleTimer = null;
@@ -1294,6 +1295,7 @@ class TeslaCamPlayer {
 
                         [...metaTracks, ...videoTracks].forEach(t => {
                             trackTimescales.set(t.id, t.timescale || info.timescale || 1);
+                            trackTypes.set(t.id, (t.type || '').toLowerCase());
                             // Keep this modest; for long clips we still get many samples.
                             mp4boxfile.setExtractionOptions(t.id, null, { nbSamples: 5000 });
                         });
@@ -1315,9 +1317,12 @@ class TeslaCamPlayer {
                             const t = (s.cts ?? s.dts ?? 0) / timescale;
                             if (!s.data) continue;
 
+                            const trackType = trackTypes.get(trackId) || '';
+
                             // Case A: H.264 SEI telemetry embedded in *video* samples
-                            if (s.is_sync !== undefined || s.size !== undefined) {
-                                const seiUsers = this.decodeH264SeiUserDataUnregisteredFromAvcSample(s.data);
+                            if (trackType === 'video') {
+                                const sampleU8 = (s.data instanceof Uint8Array) ? s.data : new Uint8Array(s.data);
+                                const seiUsers = this.decodeH264SeiUserDataUnregisteredFromAvcSample(sampleU8);
                                 for (const userBytes of seiUsers) {
                                     const decoded = this.getTeslaTelemetryFromSeiUserData(userBytes);
                                     if (decoded) {
@@ -1379,7 +1384,9 @@ class TeslaCamPlayer {
         this.currentTelemetry = this.telemetryByEventIndex.get(this.currentEventIndex) || null;
 
         if (!this.currentTelemetry?.points?.length) {
-            this.telemetryPanel.style.display = 'none';
+            this.telemetryPanel.style.display = 'flex';
+            this.telemetryStatus.textContent = 'Telemetry: not detected';
+            this.telemetryValues.innerHTML = '';
             return;
         }
 
